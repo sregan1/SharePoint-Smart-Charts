@@ -1,4 +1,4 @@
-declare interface ISmartDataVisualizationWebPartStrings {
+declare interface ISharePointSmartChartsWebPartStrings {
   PropertyPaneDescription: string;
   // Header
   HeaderGroupName: string;
@@ -294,7 +294,7 @@ declare interface ISmartDataVisualizationWebPartStrings {
   ExportExcelTitle: string;
 }
 
-declare module 'SmartDataVisualizationWebPartStrings' {
-  const strings: ISmartDataVisualizationWebPartStrings;
+declare module 'SharePointSmartChartsWebPartStrings' {
+  const strings: ISharePointSmartChartsWebPartStrings;
   export = strings;
 }

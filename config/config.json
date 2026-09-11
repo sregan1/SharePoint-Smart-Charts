@@ -2,17 +2,17 @@
   "$schema": "https://developer.microsoft.com/json-schemas/core-build/entry-point-bundle-definition.schema.json",
   "version": "2.0",
   "bundles": {
-    "smart-data-visualization-web-part": {
+    "sharepoint-smart-charts-web-part": {
       "components": [
         {
-          "entrypoint": "./lib/webparts/smartDataVisualization/SmartDataVisualizationWebPart.js",
-          "manifest": "./src/webparts/smartDataVisualization/SmartDataVisualizationWebPart.manifest.json"
+          "entrypoint": "./lib/webparts/sharePointSmartCharts/SharePointSmartChartsWebPart.js",
+          "manifest": "./src/webparts/sharePointSmartCharts/SharePointSmartChartsWebPart.manifest.json"
         }
       ]
     }
   },
   "externals": {},
   "localizedResources": {
-    "SmartDataVisualizationWebPartStrings": "lib/webparts/smartDataVisualization/loc/{locale}.js"
+    "SharePointSmartChartsWebPartStrings": "lib/webparts/sharePointSmartCharts/loc/{locale}.js"
   }
 }

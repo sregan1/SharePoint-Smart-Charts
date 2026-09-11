@@ -4,7 +4,7 @@ import { spfi, SPFx } from '@pnp/sp';
 import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 import {
   IDataSourceConfig,
   IChartRecord,
@@ -27,7 +27,7 @@ import {
   clearCachedRows,
   buildCacheKey,
 } from '../services/dataLoaders';
-import styles from './SmartDataVisualization.module.scss';
+import styles from './SharePointSmartCharts.module.scss';
 
 const SIZE_LIMIT = 200_000; // ~200KB JSON — safe SPFx property bag limit
 

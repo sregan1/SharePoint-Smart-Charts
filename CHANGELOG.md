@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Smart Data Visualization are documented here.
+All notable changes to SharePoint Smart Charts are documented here.
 
 ---
 
@@ -30,7 +30,7 @@ A hardening release. No new chart types or data sources — this release is a fu
 - **CSV parse warnings**: a partial parse (some rows malformed) now shows "N row(s) could not be parsed and were skipped" instead of silently dropping rows with no indication
 - **Fetch timeout** (30s) and a clearer error for non-JSON responses on REST API and SharePoint File requests, so a hung or misbehaving endpoint no longer leaves the panel stuck on "Loading…" indefinitely
 - **Billions (B) abbreviation tier** — "Abbreviate Numbers" now formats values ≥ 1 billion as e.g. `1.5B`, in addition to the existing K/M tiers
-- **Screenshots**: Microsoft Graph source with Data Path mapped to a sample JSON response, SharePoint Admin Center API access screen showing Graph permission approval, and a finished page composing six Smart Data Visualization web parts into an IT operations dashboard
+- **Screenshots**: Microsoft Graph source with Data Path mapped to a sample JSON response, SharePoint Admin Center API access screen showing Graph permission approval, and a finished page composing six SharePoint Smart Charts web parts into an IT operations dashboard
 
 ### Changed
 

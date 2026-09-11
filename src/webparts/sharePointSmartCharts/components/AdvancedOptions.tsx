@@ -1,7 +1,7 @@
 import * as React from 'react';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 import { ChartType, IBookmark, isScatterOrBubble, fmt } from '../types';
-import styles from './SmartDataVisualization.module.scss';
+import styles from './SharePointSmartCharts.module.scss';
 
 interface IAdvancedOptionsProps {
   columns: string[];

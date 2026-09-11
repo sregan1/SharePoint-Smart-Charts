@@ -17,7 +17,7 @@ export interface IChartSelection {
   series: string;
 }
 
-export interface ISmartDataVisualizationWebPartProps {
+export interface ISharePointSmartChartsWebPartProps {
   // Web part header (above the chart container)
   webPartHeader: string;
   showWebPartHeader: boolean;
@@ -119,10 +119,10 @@ export interface ISmartDataVisualizationWebPartProps {
   showBubbleSizeLegend: boolean;
 }
 
-export interface ISmartDataVisualizationProps extends ISmartDataVisualizationWebPartProps {
+export interface ISharePointSmartChartsProps extends ISharePointSmartChartsWebPartProps {
   context: WebPartContext;
   isDarkTheme: boolean;
   isReadOnly: boolean;
-  onPropertiesUpdate: (props: Partial<ISmartDataVisualizationWebPartProps>) => void;
+  onPropertiesUpdate: (props: Partial<ISharePointSmartChartsWebPartProps>) => void;
   onItemSelected: (selection: IChartSelection) => void;
 }

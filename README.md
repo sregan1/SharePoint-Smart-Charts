@@ -1,6 +1,6 @@
-# Smart Data Visualization — SharePoint SPFx Web Part
+# SharePoint Smart Charts
 
-[![Version](https://img.shields.io/badge/version-1.3.1-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/smart-data-visualization) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.3.1-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/sharepoint-smart-charts) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A SharePoint Framework (SPFx) web part that renders interactive charts from multiple data sources with no coding required — 17 chart types, drill-down, bookmarks, trendlines, and click-to-filter integration, all configured through the SharePoint page editor.
 
@@ -123,7 +123,7 @@ See [Chart Types](#chart-types) above for individual chart screenshots.
 
 **Several web parts composed on one page:**
 
-![Finished IT Operations dashboard with six Smart Data Visualization web parts](screenshots/showcase-it-ops-page.png)
+![Finished IT Operations dashboard with six SharePoint Smart Charts web parts](screenshots/showcase-it-ops-page.png)
 
 ---
 
@@ -131,11 +131,11 @@ See [Chart Types](#chart-types) above for individual chart screenshots.
 
 The pre-built package is included in the repository. To deploy without installing Node.js or building anything:
 
-1. Download `sharepoint/solution/smart-data-visualization.sppkg` from this repository.
+1. Download `sharepoint/solution/sharepoint-smart-charts.sppkg` from this repository.
 2. Upload it to your **SharePoint App Catalog** (SharePoint Admin Center → Advanced → App Catalog → Apps for SharePoint).
 3. Check **Make this solution available to all sites** and click **Deploy**.
 4. (Only if you plan to use the **Microsoft Graph** data source) approve the pending Graph permission request — see [Graph API Permissions](#graph-api-permissions).
-5. On any modern SharePoint page, click **Edit** → **+** → search for **Smart Data Visualization**.
+5. On any modern SharePoint page, click **Edit** → **+** → search for **SharePoint Smart Charts**.
 
 ---
 
@@ -166,7 +166,7 @@ npm install --legacy-peer-deps
 gulp serve
 ```
 
-Open the Workbench URL shown in the terminal. Add the **Smart Data Visualization** web part to the page.
+Open the Workbench URL shown in the terminal. Add the **SharePoint Smart Charts** web part to the page.
 
 ---
 
@@ -179,14 +179,14 @@ gulp bundle --ship
 # 2. Package into a .sppkg file
 gulp package-solution --ship
 
-# Output: sharepoint/solution/smart-data-visualization.sppkg
+# Output: sharepoint/solution/sharepoint-smart-charts.sppkg
 ```
 
 **Deploy to SharePoint:**
 1. Go to **SharePoint Admin Center** → **App Catalog**
-2. Upload `smart-data-visualization.sppkg`
+2. Upload `sharepoint-smart-charts.sppkg`
 3. Check **Make this solution available to all sites** (or deploy to specific sites)
-4. On any SharePoint page, click **Edit** → **+** → search for **Smart Data Visualization**
+4. On any SharePoint page, click **Edit** → **+** → search for **SharePoint Smart Charts**
 
 ---
 
@@ -322,7 +322,7 @@ node sample-data/test-api-server.js
 ## Project Structure
 
 ```
-smart-data-visualization/
+sharepoint-smart-charts/
 ├── config/
 │   ├── config.json               # Bundle entry points + localization
 │   ├── package-solution.json     # Solution ID, version
@@ -332,11 +332,11 @@ smart-data-visualization/
 ├── screenshots/                  # Documentation screenshots
 ├── src/
 │   └── webparts/
-│       └── smartDataVisualization/
-│           ├── SmartDataVisualizationWebPart.ts      # Web part class, property pane, Dynamic Data source
-│           ├── SmartDataVisualizationWebPart.manifest.json
+│       └── sharePointSmartCharts/
+│           ├── SharePointSmartChartsWebPart.ts      # Web part class, property pane, Dynamic Data source
+│           ├── SharePointSmartChartsWebPart.manifest.json
 │           ├── components/
-│           │   ├── SmartDataVisualization.tsx        # Root component — pipeline, drill-down, bookmarks
+│           │   ├── SharePointSmartCharts.tsx        # Root component — pipeline, drill-down, bookmarks
 │           │   ├── DataSourcePanel.tsx               # Data loading UI (5 sources, sheet picker)
 │           │   ├── ColumnMapper.tsx                  # Column → axis mapping, per-series colors/types
 │           │   ├── DataControls.tsx                  # Sort, filter, limit, group-by aggregation
@@ -344,7 +344,7 @@ smart-data-visualization/
 │           │   ├── ChartRenderer.tsx                 # Chart.js rendering — all 17 chart types
 │           │   ├── DataTable.tsx                     # Tabular data view
 │           │   ├── ExportBar.tsx                     # PNG / JPEG / CSV / Excel export
-│           │   └── SmartDataVisualization.module.scss
+│           │   └── SharePointSmartCharts.module.scss
 │           ├── services/
 │           │   └── dataLoaders.ts                    # Shared loaders: list, file, REST, Graph, cache
 │           ├── types/index.ts                        # Shared TypeScript types

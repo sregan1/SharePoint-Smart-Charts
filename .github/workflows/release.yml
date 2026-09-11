@@ -42,8 +42,8 @@ jobs:
           name: "Latest Build (v${{ steps.version.outputs.version }})"
           body: |
             Automated build from commit ${{ github.sha }}.
-            Upload `smart-data-visualization.sppkg` to your SharePoint App Catalog to deploy.
-          artifacts: "sharepoint/solution/smart-data-visualization.sppkg"
+            Upload `sharepoint-smart-charts.sppkg` to your SharePoint App Catalog to deploy.
+          artifacts: "sharepoint/solution/sharepoint-smart-charts.sppkg"
           artifactContentType: application/zip
           allowUpdates: true
           removeArtifacts: true
@@ -87,7 +87,7 @@ jobs:
           name: "v${{ steps.check_version_tag.outputs.semver }}"
           bodyFile: "release_notes.md"
           commit: ${{ github.sha }}
-          artifacts: "sharepoint/solution/smart-data-visualization.sppkg"
+          artifacts: "sharepoint/solution/sharepoint-smart-charts.sppkg"
           artifactContentType: application/zip
           allowUpdates: false
           makeLatest: true

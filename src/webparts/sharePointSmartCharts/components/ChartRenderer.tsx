@@ -24,7 +24,7 @@ import { BoxPlotController, BoxAndWiskers, ViolinController, Violin } from '@sgr
 import { TreemapController, TreemapElement } from 'chartjs-chart-treemap';
 import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
 import { Bar, Line, Scatter, Pie, Doughnut, Bubble, Radar, Chart as GenericChart } from 'react-chartjs-2';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 import {
   ChartType,
   IChartRecord,
@@ -37,9 +37,9 @@ import {
   resolveColors,
   fmt,
 } from '../types';
-import { IChartSelection } from './ISmartDataVisualizationProps';
+import { IChartSelection } from './ISharePointSmartChartsProps';
 import ExportBar from './ExportBar';
-import styles from './SmartDataVisualization.module.scss';
+import styles from './SharePointSmartCharts.module.scss';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ChartDataLabels = require('chartjs-plugin-datalabels');

@@ -1,6 +1,6 @@
 import * as React from 'react';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
-import styles from './SmartDataVisualization.module.scss';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
+import styles from './SharePointSmartCharts.module.scss';
 
 interface IDataControlsProps {
   columns: string[];

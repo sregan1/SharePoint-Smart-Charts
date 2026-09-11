@@ -1,6 +1,6 @@
 import * as React from 'react';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
-import { ISmartDataVisualizationProps, IChartSelection } from './ISmartDataVisualizationProps';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
+import { ISharePointSmartChartsProps, IChartSelection } from './ISharePointSmartChartsProps';
 import {
   IChartRecord,
   IColumnConfig,
@@ -26,9 +26,9 @@ import ColumnMapper from './ColumnMapper';
 import DataControls from './DataControls';
 import ChartRenderer from './ChartRenderer';
 import DataTable from './DataTable';
-import styles from './SmartDataVisualization.module.scss';
+import styles from './SharePointSmartCharts.module.scss';
 
-interface ISmartDataVisualizationState {
+interface ISharePointSmartChartsState {
   data: IChartRecord[];
   columns: string[];
   dataSourceConfig: IDataSourceConfig;
@@ -149,7 +149,7 @@ const buildColumnConfig = (
   };
 };
 
-const SmartDataVisualization: React.FC<ISmartDataVisualizationProps> = (props) => {
+const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => {
   const {
     context,
     isReadOnly,
@@ -182,7 +182,7 @@ const SmartDataVisualization: React.FC<ISmartDataVisualizationProps> = (props) =
 
   // Lazy initializer — runs once synchronously before first render.
   // If uploadedData was persisted, restore it immediately so the chart renders on frame 1.
-  const [state, setState] = React.useState<ISmartDataVisualizationState>(() => {
+  const [state, setState] = React.useState<ISharePointSmartChartsState>(() => {
     // Migration guard: 'paste' was removed; treat any old instances as 'upload'
     const rawType = props.dataSourceType as string;
     const srcType = (rawType === 'paste' || !rawType) ? 'upload' : props.dataSourceType;
@@ -931,4 +931,4 @@ const SmartDataVisualization: React.FC<ISmartDataVisualizationProps> = (props) =
   );
 };
 
-export default SmartDataVisualization;
+export default SharePointSmartCharts;

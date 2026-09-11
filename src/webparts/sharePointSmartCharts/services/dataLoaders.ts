@@ -5,7 +5,7 @@ import '@pnp/sp/lists';
 import '@pnp/sp/items';
 import * as Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 import { IChartRecord, fmt } from '../types';
 
 // SharePoint REST returns at most this many items per request; results at this

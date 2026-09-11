@@ -1,5 +1,5 @@
 
-require("./SmartDataVisualization.module.css");
+require("./SharePointSmartCharts.module.css");
 const styles = {
   container: 'container_f8a41f4f',
   webPartHeader: 'webPartHeader_f8a41f4f',

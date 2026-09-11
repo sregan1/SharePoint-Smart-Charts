@@ -15,17 +15,17 @@ import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { IDynamicDataCallables, IDynamicDataPropertyDefinition } from '@microsoft/sp-dynamic-data';
 
-import SmartDataVisualization from './components/SmartDataVisualization';
+import SharePointSmartCharts from './components/SharePointSmartCharts';
 import {
-  ISmartDataVisualizationProps,
-  ISmartDataVisualizationWebPartProps,
+  ISharePointSmartChartsProps,
+  ISharePointSmartChartsWebPartProps,
   IChartSelection,
-} from './components/ISmartDataVisualizationProps';
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+} from './components/ISharePointSmartChartsProps';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 import { ChartType } from './types';
 
-export default class SmartDataVisualizationWebPart
-  extends BaseClientSideWebPart<ISmartDataVisualizationWebPartProps>
+export default class SharePointSmartChartsWebPart
+  extends BaseClientSideWebPart<ISharePointSmartChartsWebPartProps>
   implements IDynamicDataCallables {
 
   private _isDarkTheme: boolean = false;
@@ -59,8 +59,8 @@ export default class SmartDataVisualizationWebPart
 
   public render(): void {
     const p = this.properties;
-    const element: React.ReactElement<ISmartDataVisualizationProps> = React.createElement(
-      SmartDataVisualization,
+    const element: React.ReactElement<ISharePointSmartChartsProps> = React.createElement(
+      SharePointSmartCharts,
       {
         // Header
         webPartHeader: p.webPartHeader || '',
@@ -165,7 +165,7 @@ export default class SmartDataVisualizationWebPart
         context: this.context,
         isDarkTheme: this._isDarkTheme,
         isReadOnly: this.displayMode === DisplayMode.Read,
-        onPropertiesUpdate: (props: Partial<ISmartDataVisualizationWebPartProps>) => {
+        onPropertiesUpdate: (props: Partial<ISharePointSmartChartsWebPartProps>) => {
           Object.assign(this.properties, props);
           // SPFx only writes property changes into the page's saved draft when
           // they flow through the property pane's dirty-bit pipeline. Settings
@@ -235,7 +235,7 @@ export default class SmartDataVisualizationWebPart
 
   protected onPropertyPaneFieldChanged(propertyPath: string, oldValue: unknown, newValue: unknown): void {
     super.onPropertyPaneFieldChanged(propertyPath, oldValue, newValue);
-    if (SmartDataVisualizationWebPart.PANE_STRUCTURE_FIELDS.indexOf(propertyPath) >= 0) {
+    if (SharePointSmartChartsWebPart.PANE_STRUCTURE_FIELDS.indexOf(propertyPath) >= 0) {
       this.context.propertyPane.refresh();
     }
   }

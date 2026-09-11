@@ -1,4 +1,4 @@
-import * as strings from 'SmartDataVisualizationWebPartStrings';
+import * as strings from 'SharePointSmartChartsWebPartStrings';
 
 export type ChartType =
   | 'bar'

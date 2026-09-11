@@ -1,8 +1,8 @@
-# Smart Data Visualization — User Guide
+# SharePoint Smart Charts — User Guide
 
 *Version 1.3.1*
 
-This guide walks through every feature of the Smart Data Visualization web part from a page editor's perspective.
+This guide walks through every feature of the SharePoint Smart Charts web part from a page editor's perspective.
 
 ---
 
@@ -38,7 +38,7 @@ This guide walks through every feature of the Smart Data Visualization web part 
 1. Navigate to the SharePoint page where you want to display the chart.
 2. Click the **Edit** button (pencil icon) in the top-right corner.
 3. Click the **+** icon where you want to add the web part.
-4. Search for **Smart Data Visualization** and click it.
+4. Search for **SharePoint Smart Charts** and click it.
 5. The web part appears in edit mode, showing the data source panel.
 
 > **Tip:** The data source panel and column mapper are only visible when the page is in **Edit** mode. In View mode, page visitors see the chart plus any viewer features you enable (filters, bookmarks, drill-down — see [section 11](#11-interactive-features-for-page-viewers)).
@@ -478,7 +478,7 @@ For list/file/API sources, viewers see a **↻ Refresh Data** button to re-pull 
 
 ### Connecting Other Web Parts (Dynamic Data)
 
-The web part publishes three dynamic data properties — **Selected category**, **Selected value**, and **Selected series** — updated whenever someone clicks a chart element. Web parts that consume dynamic data (e.g., the Embed web part, or list web parts with dynamic filtering) can connect to these to build click-to-filter dashboards: edit the consuming web part → **Connect to source** → choose the Smart Data Visualization web part.
+The web part publishes three dynamic data properties — **Selected category**, **Selected value**, and **Selected series** — updated whenever someone clicks a chart element. Web parts that consume dynamic data (e.g., the Embed web part, or list web parts with dynamic filtering) can connect to these to build click-to-filter dashboards: edit the consuming web part → **Connect to source** → choose the SharePoint Smart Charts web part.
 
 ---
 

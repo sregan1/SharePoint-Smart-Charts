@@ -1,6 +1,6 @@
 # Code Review Fix Plan — July 2026
 
-Execution plan from the July 10, 2026 code review of Smart Data Visualization v1.2.0.
+Execution plan from the July 10, 2026 code review of SharePoint Smart Charts v1.2.0.
 Work through items in order (Phase 1 → 4), checking boxes as you complete them.
 
 ## Context for the executor
@@ -9,16 +9,16 @@ Work through items in order (Phase 1 → 4), checking boxes as you complete them
 - **Build/verify**: `npm run build` (gulp bundle — runs tsc, ESLint, webpack). Baseline is clean as of this review. Run it after each phase at minimum; a phase is not done until it builds clean.
 - **Line numbers** below were accurate at review time (commit `f208b01`). Verify context before editing — earlier fixes in this plan will shift later line numbers.
 - **Critical codebase invariant**: `onPropertiesUpdate` mutates `this.properties` on the web part WITHOUT re-rendering React. Therefore (a) any inline-edited setting must flow through component STATE (props go stale until the next web-part render), and (b) every inline handler that changes persisted config must update BOTH state and properties. Several bugs below are violations of this invariant — do not introduce new ones.
-- **Localization**: all UI strings live in `src/webparts/smartDataVisualization/loc/en-us.js` + `mystrings.d.ts` (currently 257 keys, in parity — keep it that way; add both sides for any new string). Use American English.
+- **Localization**: all UI strings live in `src/webparts/sharePointSmartCharts/loc/en-us.js` + `mystrings.d.ts` (currently 257 keys, in parity — keep it that way; add both sides for any new string). Use American English.
 - **Known tooling gotcha**: the Edit tool normalizes the literal 6-char escape `﻿` into an invisible BOM character. If you touch the BOM line in `handleExportCsv` (ChartRenderer.tsx ~line 319), verify the source still contains the escape sequence, not a raw BOM.
 
-Key files (all under `src/webparts/smartDataVisualization/`):
+Key files (all under `src/webparts/sharePointSmartCharts/`):
 
 | File | Role |
 |---|---|
 | `components/ChartRenderer.tsx` (~1400 lines) | All Chart.js data building, options, plugins, export |
-| `components/SmartDataVisualization.tsx` (~850 lines) | State, data pipeline (filter → aggregate → sort → limit), auto-load/refresh, drill-down, bookmarks |
-| `SmartDataVisualizationWebPart.ts` (~640 lines) | Property pane (simple/advanced), dynamic data |
+| `components/SharePointSmartCharts.tsx` (~850 lines) | State, data pipeline (filter → aggregate → sort → limit), auto-load/refresh, drill-down, bookmarks |
+| `SharePointSmartChartsWebPart.ts` (~640 lines) | Property pane (simple/advanced), dynamic data |
 | `components/DataSourcePanel.tsx` | Data source UI + manual loads |
 | `services/dataLoaders.ts` | All loaders + sessionStorage cache |
 | `components/ColumnMapper.tsx` | Column mapping + per-series color/type |
@@ -31,7 +31,7 @@ Key files (all under `src/webparts/smartDataVisualization/`):
 
 ### [x] 1.1 Chart-type effect silently rewrites a valid numeric X mapping (data loss)
 
-`components/SmartDataVisualization.tsx:293-321` — the `React.useEffect(..., [chartType])` "switching FROM a numeric-X chart" `else` branch (lines 309-318) runs on **first mount** too (for upload sources, the lazy initializer at lines 167-223 restores `uploadedData` synchronously, so `state.data.length > 0` on mount). It cannot distinguish "user just left scatter" from "user deliberately mapped a numeric column."
+`components/SharePointSmartCharts.tsx:293-321` — the `React.useEffect(..., [chartType])` "switching FROM a numeric-X chart" `else` branch (lines 309-318) runs on **first mount** too (for upload sources, the lazy initializer at lines 167-223 restores `uploadedData` synchronously, so `state.data.length > 0` on mount). It cannot distinguish "user just left scatter" from "user deliberately mapped a numeric column."
 
 **Failure**: bar chart of uploaded CSV with `xColumn = "Year"` (numeric strings count — `isNumericCol` matches any parseable value). Every page load in edit mode remaps X to the first non-numeric column and **persists it** via `onPropertiesUpdate`. Also fires on bar → line switches with numeric X.
 
@@ -55,7 +55,7 @@ React.useEffect(() => {
 
 ### [x] 1.2 `count` aggregation always renders a blank chart
 
-`components/SmartDataVisualization.tsx:75-77` (producer) + `effectiveColumnConfig` (~line 598). `aggregateRows` with `count` emits rows containing only `[groupByColumn, Count]`, but `columnConfig.yColumns` still points at original columns → ChartRenderer reads all-null → blank chart, no error. The `Count` column is **unselectable**: ColumnMapper options come from `state.columns` (pre-aggregation), and `buildColumnConfig`/`handleDataLoaded` strip any column not in the original list.
+`components/SharePointSmartCharts.tsx:75-77` (producer) + `effectiveColumnConfig` (~line 598). `aggregateRows` with `count` emits rows containing only `[groupByColumn, Count]`, but `columnConfig.yColumns` still points at original columns → ChartRenderer reads all-null → blank chart, no error. The `Count` column is **unselectable**: ColumnMapper options come from `state.columns` (pre-aggregation), and `buildColumnConfig`/`handleDataLoaded` strip any column not in the original list.
 
 **Fix**: in `effectiveColumnConfig`, when the effective aggregation is `count`, override `yColumns: ['Count']` (and X to the effective group-by column when set). Mirror this in the drill-down path if it aggregates with count.
 
@@ -110,19 +110,19 @@ const exportImage = (mime: string, quality: number, filename: string) => {
 
 ### [x] 2.1 Auto-refresh / manual refresh read stale props after inline edits
 
-`components/SmartDataVisualization.tsx:234-288` (auto-load effect), `:324-330` (interval), and `handleRefresh` (~line 532). All read `props.dataSourceType/dataUrl/listName/...`, which go stale after inline edits (invariant above). Failure: after changing the REST URL inline, an auto-refresh tick refetches the OLD URL and overwrites fresh data; `handleRefresh` clears the wrong cache key.
+`components/SharePointSmartCharts.tsx:234-288` (auto-load effect), `:324-330` (interval), and `handleRefresh` (~line 532). All read `props.dataSourceType/dataUrl/listName/...`, which go stale after inline edits (invariant above). Failure: after changing the REST URL inline, an auto-refresh tick refetches the OLD URL and overwrites fresh data; `handleRefresh` clears the wrong cache key.
 
 **Fix**: read source config from `state.dataSourceConfig` (already mirrored and fresh) in all three places. Cleanest: keep a `dataSourceConfigRef` in sync (like `columnConfigRef`) and read it inside the effect/handlers, keeping `refreshKey` as the only trigger dep. The cache key in both the effect and `handleRefresh` must be built from the same fresh values.
 
 ### [x] 2.2 Applying a bookmark in edit mode never persists
 
-`components/SmartDataVisualization.tsx:488-513` — `handleApplyBookmark` updates state mirrors + `columnConfigRef` but never calls `onPropertiesUpdate`. Author applies a bookmark, saves the page → published viewers get the pre-bookmark chart; a later single-field save persists a mixed state that never existed on screen.
+`components/SharePointSmartCharts.tsx:488-513` — `handleApplyBookmark` updates state mirrors + `columnConfigRef` but never calls `onPropertiesUpdate`. Author applies a bookmark, saves the page → published viewers get the pre-bookmark chart; a later single-field save persists a mixed state that never existed on screen.
 
 **Fix**: when `!isReadOnly`, also call `onPropertiesUpdate` with all applied fields (sortColumn, sortDirection, filterColumn, filterValue, groupByColumn, aggregation, xColumn, yColumns). Keep read-mode apply non-persisting (it has no `onPropertiesUpdate` effect anyway, but make the intent explicit).
 
 ### [x] 2.3 Numeric strings sort lexicographically
 
-`components/SmartDataVisualization.tsx:573-580` — comparator only compares numerically when both values are `typeof number`; string-encoded numbers (REST APIs, SP text columns) sort "100" < "20" < "9".
+`components/SharePointSmartCharts.tsx:573-580` — comparator only compares numerically when both values are `typeof number`; string-encoded numbers (REST APIs, SP text columns) sort "100" < "20" < "9".
 
 **Fix**: coerce first, mirroring the aggregation coercion at line 87:
 
@@ -185,7 +185,7 @@ if (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn)) return dir * (an - bn);
 
 `components/ChartRenderer.tsx` — two defects: (a) ~line 1119 `scatterOptions` sets the **x** axis type from `logScale` (the Y toggle), so "Log Y" logs both axes on scatter/bubble while the actual `logScaleX` prop does nothing there; (b) `logScaleXApplies` (~lines 508-512) includes `'histogram'`, whose X values are category bin labels → `type: 'logarithmic'` parses them as NaN → blank chart.
 
-**Fix**: in `scatterOptions`, x axis type from `logScaleX`, y axis type from `logScale`. Remove `'histogram'` from `logScaleXApplies`. Check the property pane (`SmartDataVisualizationWebPart.ts`) so the Log X toggle isn't offered for histogram if it's conditionally shown.
+**Fix**: in `scatterOptions`, x axis type from `logScaleX`, y axis type from `logScale`. Remove `'histogram'` from `logScaleXApplies`. Check the property pane (`SharePointSmartChartsWebPart.ts`) so the Log X toggle isn't offered for histogram if it's conditionally shown.
 
 ### [x] 2.13 3-digit hex palette entries produce invalid colors when alpha is concatenated
 
@@ -221,11 +221,11 @@ if (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn)) return dir * (an - bn);
 
 ### [x] 3.5 `cacheMinutes` offered for all source types but only works for REST/Graph
 
-`SmartDataVisualizationWebPart.ts:~628-634` — disable the slider unless `dataSourceType` is `restApi`/`graphApi` (same pattern as `refreshIntervalMinutes` for upload), and/or note it in the field description. Do not implement SP list/file caching.
+`SharePointSmartChartsWebPart.ts:~628-634` — disable the slider unless `dataSourceType` is `restApi`/`graphApi` (same pattern as `refreshIntervalMinutes` for upload), and/or note it in the field description. Do not implement SP list/file caching.
 
 ### [x] 3.6 Background auto-refresh slams the config panel shut mid-edit
 
-`components/SmartDataVisualization.tsx:~363` — `handleDataLoaded` forces `isConfigOpen: false`; when the auto-refresh interval triggers a reload while the author has the panel open, it closes under them. **Fix**: add an optional flag (e.g. `handleDataLoaded(data, columns, { fromAutoLoad?: boolean })`) and preserve `prev.isConfigOpen` for auto/refresh loads.
+`components/SharePointSmartCharts.tsx:~363` — `handleDataLoaded` forces `isConfigOpen: false`; when the auto-refresh interval triggers a reload while the author has the panel open, it closes under them. **Fix**: add an optional flag (e.g. `handleDataLoaded(data, columns, { fromAutoLoad?: boolean })`) and preserve `prev.isConfigOpen` for auto/refresh loads.
 
 ### [x] 3.7 `parseBookmarks` accepts malformed entries that crash on apply
 
@@ -233,7 +233,7 @@ if (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn)) return dir * (an - bn);
 
 ### [x] 3.8 `Count` column name is hardcoded English and can collide with a real column
 
-`components/SmartDataVisualization.tsx:~76`. Two parts: (a) if the group-by column is itself named `Count`, `out.Count = members.length` destroys the group labels — disambiguate (e.g. use `Count of rows` or append a suffix when colliding). (b) Localization of the name is OPTIONAL and touchy — the string becomes a column key that 1.2 (item 1.2 above) must match; if you localize it, define ONE shared constant used by both `aggregateRows` and `effectiveColumnConfig`. Simplest safe fix: keep `Count` as the key, fix only the collision, and export a `COUNT_COLUMN` constant both sites import.
+`components/SharePointSmartCharts.tsx:~76`. Two parts: (a) if the group-by column is itself named `Count`, `out.Count = members.length` destroys the group labels — disambiguate (e.g. use `Count of rows` or append a suffix when colliding). (b) Localization of the name is OPTIONAL and touchy — the string becomes a column key that 1.2 (item 1.2 above) must match; if you localize it, define ONE shared constant used by both `aggregateRows` and `effectiveColumnConfig`. Simplest safe fix: keep `Count` as the key, fix only the collision, and export a `COUNT_COLUMN` constant both sites import.
 
 ### [x] 3.9 Manual panel loads bypass the cache — stale data resurrects on reload
 
@@ -265,7 +265,7 @@ if (av !== '' && bv !== '' && !isNaN(an) && !isNaN(bn)) return dir * (an - bn);
 
 ### [x] 4.1 Memoize ChartRenderer — PARTIAL, scope deliberately reduced
 
-Biggest perf win. Every parent render (e.g. each keystroke in the viewer filter) rebuilds all datasets/options with new identities, forcing full `chart.update()`. Wrap the chart data builders and options objects in `React.useMemo` with correct deps, wrap the component in `React.memo`, and hoist a single `Intl.NumberFormat` instance out of `formatValue` (it's called per data label per draw). Be careful: deps lists must include every prop/state the builders read — an incorrect deps list here is worse than no memo. Also debounce the read-mode viewer filter input (~250 ms) in `SmartDataVisualization.tsx` (~line 699).
+Biggest perf win. Every parent render (e.g. each keystroke in the viewer filter) rebuilds all datasets/options with new identities, forcing full `chart.update()`. Wrap the chart data builders and options objects in `React.useMemo` with correct deps, wrap the component in `React.memo`, and hoist a single `Intl.NumberFormat` instance out of `formatValue` (it's called per data label per draw). Be careful: deps lists must include every prop/state the builders read — an incorrect deps list here is worse than no memo. Also debounce the read-mode viewer filter input (~250 ms) in `SharePointSmartCharts.tsx` (~line 699).
 
 **Done**: `ChartRenderer` wrapped in `React.memo` (no custom comparator — default shallow prop compare); `formatValue` now caches one `Intl.NumberFormat` per distinct `decimals` value instead of reconstructing per label per draw; the read-mode viewer filter value is debounced 250ms before it feeds `filteredRows`'s `useMemo` (the `<input>` itself stays instant — only the expensive filter/aggregate/chart-rebuild is delayed).
 
@@ -301,11 +301,11 @@ If a user forces `xAxisType: 'time'` and X is all-numeric (Excel serials that pr
 
 ### [x] 4.9 Adopt the existing union types in the props interface
 
-`components/ISmartDataVisualizationProps.ts` declares `sortDirection`, `aggregation`, `xAxisType`, `trendline`, `referenceLineType`, `legendPosition`, `thresholdDirection` as `string`; `types/index.ts` already defines matching union types. Adopt them and remove the `as any` cast at `SmartDataVisualization.tsx:~529`. Expect some ripple through property-pane defaults — keep the change mechanical.
+`components/ISharePointSmartChartsProps.ts` declares `sortDirection`, `aggregation`, `xAxisType`, `trendline`, `referenceLineType`, `legendPosition`, `thresholdDirection` as `string`; `types/index.ts` already defines matching union types. Adopt them and remove the `as any` cast at `SharePointSmartCharts.tsx:~529`. Expect some ripple through property-pane defaults — keep the change mechanical.
 
 ### [x] 4.10 Validate color fields in the property pane
 
-`SmartDataVisualizationWebPart.ts:~506-509, 610-613` — `referenceLineColor`/`thresholdColor` accept any string. Add `onGetErrorMessage` accepting `#rgb`/`#rrggbb`/empty (reuse one validator). Also remove `stepLine` from `PANE_STRUCTURE_FIELDS` (~line 210) — it forces pane rebuilds nothing depends on.
+`SharePointSmartChartsWebPart.ts:~506-509, 610-613` — `referenceLineColor`/`thresholdColor` accept any string. Add `onGetErrorMessage` accepting `#rgb`/`#rrggbb`/empty (reuse one validator). Also remove `stepLine` from `PANE_STRUCTURE_FIELDS` (~line 210) — it forces pane rebuilds nothing depends on.
 
 ---
 
