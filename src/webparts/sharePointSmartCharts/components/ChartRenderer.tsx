@@ -35,6 +35,8 @@ import {
   hasNoYColumn,
   needsRowColumn,
   resolveColors,
+  toSolidHex,
+  ERROR_COLUMN_PREFIX,
   fmt,
 } from '../types';
 import { IChartSelection } from './ISharePointSmartChartsProps';
@@ -122,6 +124,13 @@ interface IChartRendererProps {
   showDataPoints?: boolean;
   significancePairs?: string;
   showBubbleSizeLegend?: boolean;
+  waterfallShowTotal?: boolean;
+  waterfallPositiveColor?: string;
+  waterfallNegativeColor?: string;
+  waterfallTotalColor?: string;
+  y2ValuePrefix?: string;
+  y2ValueSuffix?: string;
+  annotations?: string;
 }
 
 // Constructing an Intl.NumberFormat is the expensive part of formatting a
@@ -147,9 +156,21 @@ const formatValue = (
   let n = val;
   let abbrev = '';
   if (abbreviate) {
-    if (Math.abs(val) >= 1e9) { n = val / 1e9; abbrev = 'B'; }
-    else if (Math.abs(val) >= 1e6) { n = val / 1e6; abbrev = 'M'; }
-    else if (Math.abs(val) >= 1e3) { n = val / 1e3; abbrev = 'K'; }
+    const units: Array<[number, string]> = [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+    const factor = Math.pow(10, decimals);
+    for (let u = 0; u < units.length; u++) {
+      const [size, letter] = units[u];
+      if (Math.abs(val) >= size) {
+        n = val / size;
+        abbrev = letter;
+        // Rounding can carry into the next unit (999,999 -> "1,000K"): promote it
+        if (Math.abs(Math.round(n * factor) / factor) >= 1000 && u > 0) {
+          n = val / units[u - 1][0];
+          abbrev = units[u - 1][1];
+        }
+        break;
+      }
+    }
   }
   const formatted = getNumberFormat(decimals).format(n);
   return `${prefix}${formatted}${abbrev}${suffix}`;
@@ -333,6 +354,13 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     showDataPoints,
     significancePairs,
     showBubbleSizeLegend,
+    waterfallShowTotal,
+    waterfallPositiveColor,
+    waterfallNegativeColor,
+    waterfallTotalColor,
+    y2ValuePrefix,
+    y2ValueSuffix,
+    annotations,
   } = props;
 
   // SharePoint section backgrounds in dark mode need light chart text/grid lines
@@ -340,6 +368,10 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
   const gridColor = isDarkTheme ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)';
 
   const chartRef = React.useRef<any>(null);
+  // Keyboard navigation: the data point index the arrow keys are on (-1 = none)
+  const focusIndexRef = React.useRef(-1);
+  const [announcement, setAnnouncement] = React.useState('');
+  const hintId = React.useRef(`sdv-hint-${Math.random().toString(36).slice(2, 8)}`).current;
   const { xColumn, yColumns, labelColumn, sizeColumn } = columnConfig;
 
   // Chart.js draws on a transparent canvas. Without an opaque backing fill, a
@@ -368,7 +400,9 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
   const handleExportCsv = () => {
     const sanitized = data.map(row => {
       const out: Record<string, unknown> = {};
-      for (const key of Object.keys(row)) out[key] = sanitizeCsvValue(row[key]);
+      for (const key of Object.keys(row)) {
+        if (key.indexOf(ERROR_COLUMN_PREFIX) !== 0) out[key] = sanitizeCsvValue(row[key]);
+      }
       return out;
     });
     const csv = Papa.unparse(sanitized as object[]);
@@ -382,9 +416,16 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
   };
 
   const handleExportExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(data as object[]);
+    const exportRows = data.map(row => {
+      const out: IChartRecord = {};
+      for (const key of Object.keys(row)) {
+        if (key.indexOf(ERROR_COLUMN_PREFIX) !== 0) out[key] = row[key];
+      }
+      return out;
+    });
+    const ws = XLSX.utils.json_to_sheet(exportRows as object[]);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.utils.book_append_sheet(wb, ws, strings.ExportSheetName);
     XLSX.writeFile(wb, exportFilename('xlsx'));
   };
 
@@ -448,8 +489,8 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
       const sum = numbers.reduce((a, b) => a + b, 0);
       if (agg === 'sum') value = sum;
       else if (agg === 'avg') value = sum / numbers.length;
-      else if (agg === 'min') value = Math.min(...numbers);
-      else if (agg === 'max') value = Math.max(...numbers);
+      else if (agg === 'min') value = numbers.reduce((a, b) => Math.min(a, b), Infinity);
+      else if (agg === 'max') value = numbers.reduce((a, b) => Math.max(a, b), -Infinity);
     }
     const kpiThreshold = parseNumOrUndefined(thresholdValue);
     const breach = kpiThreshold !== undefined &&
@@ -481,10 +522,34 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     );
   }
 
+  // Dual-axis: when a Y2 prefix/suffix is set it replaces the main one on the right axis
+  const hasY2Format = !!(y2ValuePrefix || y2ValueSuffix);
+  const y2Prefix = hasY2Format ? (y2ValuePrefix || '') : valuePrefix;
+  const y2Suffix = hasY2Format ? (y2ValueSuffix || '') : valueSuffix;
+  // Only value-bearing cartesian types get formatted ticks/tooltips (histogram
+  // counts and before/after pairs are not in the user's value units)
+  const formatsValues = ['bar', 'horizontalBar', 'line', 'area'].indexOf(chartType) >= 0 &&
+    !!(valuePrefix || valueSuffix || abbreviateNumbers || hasY2Format);
+  // Ticks/tooltips can be fractional — never round them away with a 0-decimal setting
+  const formatFlexible = (n: number, prefix: string, suffix: string): string => {
+    const digits = Number.isInteger(n) ? valueDecimals
+      : Math.max(valueDecimals, Math.min(4, (String(n).split('.')[1] || '').length));
+    return formatValue(n, prefix, suffix, digits, abbreviateNumbers);
+  };
+  const tickCallback = (prefix: string, suffix: string) => formatsValues
+    ? (v: string | number) => (isNaN(Number(v)) ? v : formatFlexible(Number(v), prefix, suffix))
+    : undefined;
+
   const datalabelPlugin: any = {
     display: showDataLabels,
-    formatter: (value: number | null) =>
-      typeof value === 'number' ? formatValue(value, valuePrefix, valueSuffix, valueDecimals, abbreviateNumbers) : '',
+    formatter: (value: number | { y?: number } | null, ctx: any) => {
+      // Time-axis datasets hold {x, y} points rather than bare numbers
+      const n = typeof value === 'number' ? value
+        : (value && typeof value === 'object' && typeof value.y === 'number' ? value.y : null);
+      if (n === null) return '';
+      const onY2 = ctx?.dataset?.yAxisID === 'y1' && hasY2Format;
+      return formatValue(n, onY2 ? y2Prefix : valuePrefix, onY2 ? y2Suffix : valueSuffix, valueDecimals, abbreviateNumbers);
+    },
     font: { size: 11, weight: 'normal' },
     color: textColor,
     anchor: isPieOrDoughnut(chartType) ? 'center' : 'end',
@@ -633,7 +698,7 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     min: axisMin,
     max: axisMax,
     grid: { display: showGridLines, color: gridColor },
-    ticks: { color: textColor },
+    ticks: { color: textColor, callback: tickCallback(valuePrefix, valueSuffix) },
     title: { display: !!yAxisLabel, text: yAxisLabel, color: textColor },
   };
 
@@ -666,8 +731,26 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     },
   };
 
+  // Tooltip values in the user's units (prefix/suffix/abbreviation, per-axis for Y2)
+  const formattedTooltip = formatsValues ? {
+    ...baseOptions.plugins.tooltip,
+    callbacks: {
+      ...(tooltipCallbacks || {}),
+      label: (item: any) => {
+        const raw = item.raw;
+        const n = typeof raw === 'number' ? raw
+          : (raw && typeof raw === 'object' && typeof raw.y === 'number' ? raw.y : null);
+        const name = item.dataset?.label ? `${item.dataset.label}: ` : '';
+        if (n === null) return `${name}${item.formattedValue ?? ''}`;
+        const onY2 = item.dataset?.yAxisID === 'y1' && hasY2Format;
+        return `${name}${formatFlexible(n, onY2 ? y2Prefix : valuePrefix, onY2 ? y2Suffix : valueSuffix)}`;
+      },
+    },
+  } : baseOptions.plugins.tooltip;
+
   const cartesianOptions: any = {
     ...baseOptions,
+    plugins: { ...baseOptions.plugins, tooltip: formattedTooltip },
     scales: {
       x: xAxisConfig,
       y: yAxisConfig,
@@ -676,7 +759,7 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
           type: logScaleY2 ? 'logarithmic' : 'linear',
           position: 'right' as const,
           grid: { display: false },
-          ticks: { color: textColor },
+          ticks: { color: textColor, callback: tickCallback(y2Prefix, y2Suffix) },
           title: { display: !!(y2AxisLabel), text: y2AxisLabel || '', color: textColor },
         },
       } : {}),
@@ -685,6 +768,7 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
 
   const horizontalOptions: any = {
     ...baseOptions,
+    plugins: { ...baseOptions.plugins, tooltip: formattedTooltip },
     indexAxis: 'y' as const,
     scales: {
       x: {
@@ -693,7 +777,7 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
         min: axisMin,
         max: axisMax,
         grid: { display: showGridLines, color: gridColor },
-        ticks: { color: textColor },
+        ticks: { color: textColor, callback: tickCallback(valuePrefix, valueSuffix) },
         title: { display: !!yAxisLabel, text: yAxisLabel, color: textColor },
       },
       y: {
@@ -756,16 +840,26 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
         _errorValues: (() => {
           if (!errorBarType || errorBarType === 'none') return undefined;
           const vals = data.map(row => numOrNull(row[col]));
-          if (errorBarType === 'custom') {
-            return data.map(row => Math.abs(numOrNull(row[errorBarColumn || '']) ?? 0));
+          let errs: number[] | undefined;
+          // Averaged groups carry their own SD/SEM (see aggregateRows) - a single
+          // series-wide deviation would be wrong for every bar
+          const perGroup = (errorBarType === 'sd' || errorBarType === 'sem') && aggregation === 'avg' &&
+            data.some(row => row[ERROR_COLUMN_PREFIX + col] !== undefined);
+          if (perGroup) {
+            errs = data.map(row => Math.abs(numOrNull(row[ERROR_COLUMN_PREFIX + col]) ?? 0));
+          } else if (errorBarType === 'custom') {
+            errs = data.map(row => Math.abs(numOrNull(row[errorBarColumn || '']) ?? 0));
+          } else {
+            const sd = computeStdDev(vals);
+            if (errorBarType === 'sd') errs = vals.map(() => sd);
+            else if (errorBarType === 'sem') {
+              const n = vals.filter(v => v !== null).length;
+              errs = vals.map(() => (n > 0 ? sd / Math.sqrt(n) : 0));
+            }
           }
-          const sd = computeStdDev(vals);
-          if (errorBarType === 'sd') return vals.map(() => sd);
-          if (errorBarType === 'sem') {
-            const n = vals.filter(v => v !== null).length;
-            return vals.map(() => (n > 0 ? sd / Math.sqrt(n) : 0));
-          }
-          return undefined;
+          // On a time axis only rows with a parseable date are plotted, so the
+          // whisker array must be filtered the same way to stay aligned.
+          return errs && timeRowIndexes ? timeRowIndexes.map(i => (errs as number[])[i]) : errs;
         })(),
       };
     });
@@ -851,7 +945,7 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
         const color = colors[i];
         const vals = data.map(row => numOrNull(row[col]));
         datasets.push({
-          label: `${col} (points)`,
+          label: `${col}${strings.PointsSuffix}`,
           type: 'line' as any,
           data: xIsTime ? toPoints(vals) : vals,
           backgroundColor: color,
@@ -996,8 +1090,8 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
       .filter((v): v is number => v !== null);
     const bins = Math.max(2, histogramBins || 10);
     if (!values.length) return { labels: [], datasets: [] };
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = values.reduce((a, b) => Math.min(a, b), Infinity);
+    const max = values.reduce((a, b) => Math.max(a, b), -Infinity);
     const width = (max - min) / bins || 1;
     const counts: number[] = new Array(bins).fill(0);
     for (const v of values) {
@@ -1030,15 +1124,22 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
       cumulative += v;
       return [start, cumulative] as [number, number];
     });
-    const positive = colors[0];
-    const negative = thresholdColor || '#d13438';
+    const positive = toSolidHex(waterfallPositiveColor || '', colors[0]);
+    const negative = toSolidHex(waterfallNegativeColor || thresholdColor || '', '#d13438');
+    const total = toSolidHex(waterfallTotalColor || '', '#69797e');
+    const barColors = values.map(v => (v >= 0 ? positive : negative));
+    if (waterfallShowTotal) {
+      labels.push(strings.WaterfallTotalLabel);
+      ranges.push([0, cumulative]);
+      barColors.push(total);
+    }
     return {
       labels,
       datasets: [{
         label: validYColumns[0],
         data: ranges,
-        backgroundColor: values.map(v => (v >= 0 ? `${positive}cc` : `${negative}cc`)),
-        borderColor: values.map(v => (v >= 0 ? positive : negative)),
+        backgroundColor: barColors.map(c => `${c}cc`),
+        borderColor: barColors,
         borderWidth: 1,
       }],
     };
@@ -1073,11 +1174,11 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     const col2 = validYColumns[1] || validYColumns[0] || '';
     const baColors = resolveColors(colorPalette, seriesColors, data.length);
     return {
-      labels: ['Before', 'After'],
+      labels: [strings.BeforeLabel, strings.AfterLabel],
       datasets: data.map((row, i) => {
         const color = baColors[i % baColors.length];
         return {
-          label: String(row[xColumn] ?? `Row ${i + 1}`),
+          label: String(row[xColumn] ?? fmt(strings.RowLabel, i + 1)),
           data: [numOrNull(row[col1]), numOrNull(row[col2])],
           borderColor: `${color}bb`,
           backgroundColor: `${color}60`,
@@ -1105,7 +1206,14 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
           ctx.type === 'data' ? `${treemapColors[ctx.dataIndex % treemapColors.length]}cc` : 'transparent',
         labels: {
           display: true,
-          color: '#ffffff',
+          color: (ctx: any) => {
+            const base = ctx.type === 'data' ? treemapColors[ctx.dataIndex % treemapColors.length] : '#000000';
+            const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(base);
+            if (!m) return '#ffffff';
+            const lum = (0.2126 * parseInt(m[1], 16) + 0.7152 * parseInt(m[2], 16) + 0.0722 * parseInt(m[3], 16)) / 255;
+            // Cells are drawn at ~80% opacity over the page background
+            return lum > 0.6 ? '#201f1e' : '#ffffff';
+          },
           formatter: (ctx: any) => ctx.raw?.g ?? '',
         },
       }],
@@ -1119,14 +1227,21 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     const xSeen = new Set<string>();
     const ySeen = new Set<string>();
     const points: Array<{ x: string; y: string; v: number }> = [];
+    const cellIndex = new Map<string, number>();
     for (const row of data) {
       const x = String(row[xColumn] ?? '');
       const y = String(row[labelColumn] ?? '');
       if (!xSeen.has(x)) { xSeen.add(x); xCats.push(x); }
       if (!ySeen.has(y)) { ySeen.add(y); yCats.push(y); }
-      points.push({ x, y, v: numOrNull(row[validYColumns[0]]) ?? 0 });
+      const v = numOrNull(row[validYColumns[0]]) ?? 0;
+      // Duplicate (x, y) pairs would draw overlapping cells — sum them instead
+      const key = `${x}\u0000${y}`;
+      const existing = cellIndex.get(key);
+      if (existing === undefined) { cellIndex.set(key, points.length); points.push({ x, y, v }); }
+      else points[existing].v += v;
     }
-    const maxAbs = Math.max(...points.map(p => Math.abs(p.v)), 1);
+    // No floor of 1: data in the 0-1 range must scale to the full color range
+    const maxAbs = points.reduce((m, p) => Math.max(m, Math.abs(p.v)), 0) || 1;
     const base = colors[0];
     const hasNeg = points.some(p => p.v < 0);
     const hasPos = points.some(p => p.v > 0);
@@ -1415,7 +1530,133 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
     },
   } : null;
 
-  const barLinePlugins = [errorBarsPlugin, significancePlugin].filter(Boolean);
+  // Inline plugin: annotation markers - a dashed vertical line at an X value with a note
+  const annotationList: Array<{ x: string; text: string }> = (annotations || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const comma = line.indexOf(',');
+      return comma < 0 ? null : { x: line.slice(0, comma).trim(), text: line.slice(comma + 1).trim() };
+    })
+    .filter((a): a is { x: string; text: string } => !!a && !!a.x && !!a.text);
+  const annotationPlugin: any = annotationList.length && ['bar', 'line', 'area'].indexOf(chartType) >= 0 ? {
+    id: 'annotationMarkers',
+    afterDatasetsDraw(chart: any) {
+      const xScale = chart.scales.x;
+      const area = chart.chartArea;
+      if (!xScale || !area) return;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.font = '11px sans-serif';
+      ctx.textBaseline = 'top';
+      annotationList.forEach((ann, i) => {
+        let px: number | undefined;
+        if (xScale.type === 'time') {
+          const t = Date.parse(ann.x);
+          if (!isNaN(t)) px = xScale.getPixelForValue(t);
+        } else {
+          const idx = ((chart.data.labels || []) as string[]).indexOf(ann.x);
+          if (idx >= 0) px = xScale.getPixelForValue(idx);
+        }
+        if (px === undefined || px < area.left - 0.5 || px > area.right + 0.5) return;
+        ctx.strokeStyle = textColor;
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(px, area.top);
+        ctx.lineTo(px, area.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        // Stagger the notes vertically so neighbors don't overprint each other
+        const y = area.top + 2 + (i % 3) * 15;
+        const w = ctx.measureText(ann.text).width + 8;
+        const alignRight = px + w > area.right;
+        const boxX = alignRight ? px - w - 2 : px + 2;
+        ctx.fillStyle = isDarkTheme ? 'rgba(27, 26, 25, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+        ctx.fillRect(boxX, y, w, 14);
+        ctx.fillStyle = textColor;
+        ctx.textAlign = 'left';
+        ctx.fillText(ann.text, boxX + 4, y + 2);
+      });
+      ctx.restore();
+    },
+  } : null;
+
+  const barLinePlugins = [errorBarsPlugin, significancePlugin, annotationPlugin].filter(Boolean);
+  const lineAreaPlugins = [errorBarsPlugin, annotationPlugin].filter(Boolean);
+
+  // ---- Keyboard navigation (arrow keys move through data points) ----
+  const keyboardNavigable = ['bar', 'horizontalBar', 'line', 'area', 'pie', 'doughnut', 'radar', 'waterfall', 'histogram']
+    .indexOf(chartType) >= 0;
+  const rawToNumber = (raw: unknown): number | null => {
+    if (typeof raw === 'number') return raw;
+    if (Array.isArray(raw)) return typeof raw[raw.length - 1] === 'number' ? raw[raw.length - 1] : null;
+    if (raw && typeof raw === 'object' && typeof (raw as { y?: unknown }).y === 'number') return (raw as { y: number }).y;
+    return null;
+  };
+  const focusPoint = (index: number): void => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    const els = (chart.data.datasets as any[])
+      .map((_d, di) => ({ datasetIndex: di, index }))
+      .filter(el => {
+        const meta = chart.getDatasetMeta(el.datasetIndex);
+        return !meta.hidden && !!meta.data[el.index];
+      });
+    if (!els.length) return;
+    const pos = chart.getDatasetMeta(els[0].datasetIndex).data[index].getProps(['x', 'y'], true);
+    chart.setActiveElements(els);
+    if (chart.tooltip) chart.tooltip.setActiveElements(els, { x: pos.x, y: pos.y });
+    chart.update('none');
+    const sourceRow = resolveSourceRow(0, index);
+    const label = chart.data.labels?.[index] ?? String(sourceRow?.[xColumn] ?? index + 1);
+    const seriesCount = Math.max(1, validYColumns.length);
+    const parts = els
+      .filter(el => el.datasetIndex < seriesCount)
+      .map(el => {
+        const ds = chart.data.datasets[el.datasetIndex];
+        const n = rawToNumber(ds.data[index]);
+        const text = n === null ? '' : formatValue(n, valuePrefix, valueSuffix, valueDecimals, abbreviateNumbers);
+        return pieOrNoLabel(ds.label) ? text : `${ds.label}: ${text}`;
+      });
+    setAnnouncement(fmt(strings.ChartPointAnnouncement, String(label), parts.join(', ')));
+  };
+  const pieOrNoLabel = (label: unknown): boolean => !label || isPieOrDoughnut(chartType);
+  const clearFocus = (): void => {
+    focusIndexRef.current = -1;
+    const chart = chartRef.current;
+    if (chart) {
+      chart.setActiveElements([]);
+      if (chart.tooltip) chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+      chart.update('none');
+    }
+    setAnnouncement('');
+  };
+  const handleChartKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const chart = chartRef.current;
+    if (!keyboardNavigable || !chart) return;
+    const count = chart.data.datasets?.[0]?.data?.length || 0;
+    if (!count) return;
+    const cur = focusIndexRef.current;
+    let next = cur;
+    switch (e.key) {
+      case 'ArrowRight': case 'ArrowDown': next = Math.min(count - 1, cur + 1); break;
+      case 'ArrowLeft': case 'ArrowUp': next = Math.max(0, cur < 0 ? 0 : cur - 1); break;
+      case 'Home': next = 0; break;
+      case 'End': next = count - 1; break;
+      case 'Escape': clearFocus(); return;
+      case 'Enter': case ' ':
+        if (cur >= 0) { e.preventDefault(); handleChartClick(null, [{ datasetIndex: 0, index: cur }]); }
+        return;
+      default: return;
+    }
+    e.preventDefault();
+    focusIndexRef.current = next;
+    focusPoint(next);
+  };
 
   // Forwarded to the underlying <canvas> so screen readers announce the chart
   const a11y = {
@@ -1436,11 +1677,11 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
       );
     } else if (chartType === 'line') {
       chartElement = (
-        <Line ref={chartRef} data={buildBarLineData('line') as any} options={cartesianOptions} plugins={[errorBarsPlugin].filter(Boolean)} {...a11y} />
+        <Line ref={chartRef} data={buildBarLineData('line') as any} options={cartesianOptions} plugins={lineAreaPlugins} {...a11y} />
       );
     } else if (chartType === 'area') {
       chartElement = (
-        <Line ref={chartRef} data={buildBarLineData('area') as any} options={cartesianOptions} plugins={[errorBarsPlugin].filter(Boolean)} {...a11y} />
+        <Line ref={chartRef} data={buildBarLineData('area') as any} options={cartesianOptions} plugins={lineAreaPlugins} {...a11y} />
       );
     } else if (chartType === 'scatter') {
       chartElement = (
@@ -1509,13 +1750,26 @@ const ChartRenderer: React.FC<IChartRendererProps> = (props) => {
 
   return (
     <div>
-      <div style={{ height: `${chartHeight || 400}px`, position: 'relative' }}>
+      <div
+        style={{ height: `${chartHeight || 400}px`, position: 'relative' }}
+        className={keyboardNavigable ? styles.chartFocusFrame : undefined}
+        {...(keyboardNavigable ? {
+          tabIndex: 0,
+          role: 'group',
+          'aria-label': chartTitle || strings.ChartAriaLabel,
+          'aria-describedby': hintId,
+          onKeyDown: handleChartKeyDown,
+          onBlur: clearFocus,
+        } : {})}
+      >
+        <span id={hintId} className={styles.srOnly}>{strings.ChartKeyboardHint}</span>
+        <div className={styles.srOnly} aria-live="polite" role="status">{announcement}</div>
         {chartElement}
         {showBubbleSizeLegend && chartType === 'bubble' && sizeColumn && (() => {
           const sizeVals = data.map(r => numOrNull(r[sizeColumn])).filter((v): v is number => v !== null);
           if (!sizeVals.length) return null;
-          const minV = Math.min(...sizeVals);
-          const maxV = Math.max(...sizeVals);
+          const minV = sizeVals.reduce((a, b) => Math.min(a, b), Infinity);
+          const maxV = sizeVals.reduce((a, b) => Math.max(a, b), -Infinity);
           const midV = (minV + maxV) / 2;
           const toR = (v: number) => Math.max(3, Math.sqrt(Math.abs(v)) * 3);
           const entries = [{ v: maxV, r: toR(maxV) }, { v: midV, r: toR(midV) }, { v: minV, r: toR(minV) }];

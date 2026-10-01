@@ -129,7 +129,7 @@
 
     /* Source type grid */
     .source-grid {
-      display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 14px;
     }
     .source-card {
       display: flex; flex-direction: column; align-items: center;
@@ -354,6 +354,7 @@
         <div class="source-card"><span class="source-icon">📋</span><span class="source-label">SharePoint List</span></div>
         <div class="source-card"><span class="source-icon">🔗</span><span class="source-label">SharePoint File</span></div>
         <div class="source-card"><span class="source-icon">🌐</span><span class="source-label">REST API</span></div>
+        <div class="source-card"><span class="source-icon">🪐</span><span class="source-label">Microsoft Graph</span></div>
       </div>
       <p class="help-text" style="margin-bottom:12px;">Upload a CSV, TSV, or Excel (.xlsx, .xls) file.</p>
       <div>
@@ -384,6 +385,7 @@
         <div class="source-card"><span class="source-icon">📋</span><span class="source-label">SharePoint List</span></div>
         <div class="source-card"><span class="source-icon">🔗</span><span class="source-label">SharePoint File</span></div>
         <div class="source-card"><span class="source-icon">🌐</span><span class="source-label">REST API</span></div>
+        <div class="source-card"><span class="source-icon">🪐</span><span class="source-label">Microsoft Graph</span></div>
       </div>
       <div class="loaded-file-banner">
         <span style="font-size:18px;">📁</span>
@@ -704,11 +706,11 @@
 <div class="screenshot-frame">
   <div class="screenshot-label">
     <span class="badge">Feature</span>
-    <span class="title">Color Palettes — All 7 palettes side by side</span>
+    <span class="title">Color Palettes — All 8 palettes side by side</span>
     <span class="hint">Property pane: Color Palette dropdown</span>
   </div>
   <div class="webpart">
-    <div id="palette-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;"></div>
+    <div id="palette-grid" style="display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;"></div>
   </div>
 </div>
 
@@ -753,6 +755,7 @@
         <div class="source-card selected"><span class="source-icon">📋</span><span class="source-label">SharePoint List</span></div>
         <div class="source-card"><span class="source-icon">🔗</span><span class="source-label">SharePoint File</span></div>
         <div class="source-card"><span class="source-icon">🌐</span><span class="source-label">REST API</span></div>
+        <div class="source-card"><span class="source-icon">🪐</span><span class="source-label">Microsoft Graph</span></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field-group">
@@ -1447,15 +1450,25 @@
   <div class="screenshot-label">
     <span class="badge">Feature</span>
     <span class="title">Viewer Filter Bar</span>
-    <span class="hint">View mode — visitors filter without editing the page</span>
+    <span class="hint">View mode — visitors add filters with operators, without editing the page</span>
   </div>
   <div class="webpart">
     <div class="wp-header"><span class="wp-header-text">Regional Revenue</span></div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-      <span style="font-size:12px;font-weight:600;color:#323130;">Filter:</span>
-      <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>Region</option></select>
-      <input type="text" value="North" style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;width:140px;">
-      <button class="btn-secondary">Clear</button>
+    <div style="display:flex;flex-direction:column;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <span style="font-size:12px;font-weight:600;color:#323130;">Filter:</span>
+        <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>Region</option></select>
+        <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>equals</option></select>
+        <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>North</option></select>
+        <button class="btn-secondary">Remove</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>Revenue</option></select>
+        <select style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;"><option>greater than</option></select>
+        <input type="text" value="250000" style="padding:4px 8px;border:1px solid #c8c6c4;border-radius:2px;font-size:12px;font-family:inherit;width:110px;">
+        <button class="btn-secondary">Remove</button>
+        <button class="btn-secondary">+ Add filter</button>
+      </div>
     </div>
     <div class="chart-container"><canvas id="c-viewerfilter" height="200"></canvas></div>
   </div>
@@ -1547,7 +1560,7 @@
   <div class="screenshot-label">
     <span class="badge">Settings</span>
     <span class="title">Property Pane — Advanced Page</span>
-    <span class="hint">Analytics, reference line, interactivity, data &amp; refresh</span>
+    <span class="hint">Analytics, reference line, annotations, dynamic data filter, interactivity, data &amp; refresh</span>
   </div>
   <div class="pp-layout">
     <div class="pp-main">
@@ -1601,6 +1614,12 @@
         </div>
       </div>
       <div class="pp-group">
+        <div class="pp-group-hdr collapsed">Annotations <span class="pp-chevron">▼</span></div>
+      </div>
+      <div class="pp-group">
+        <div class="pp-group-hdr collapsed">Filter from Another Web Part <span class="pp-chevron">▼</span></div>
+      </div>
+      <div class="pp-group">
         <div class="pp-group-hdr collapsed">Conditional Formatting <span class="pp-chevron">▼</span></div>
       </div>
       <div class="pp-group">
@@ -1614,7 +1633,7 @@
             </div>
           </div>
           <div class="pp-field">
-            <label>Cache API Results (minutes, 0 = off)</label>
+            <label>Cache Data (minutes, 0 = off)</label>
             <div class="pp-slider-row">
               <input type="range" class="pp-slider" min="0" max="60" value="10" style="pointer-events:none;">
               <span class="pp-slider-val">10</span>
@@ -1723,6 +1742,7 @@ const radarC = [95,78,82,70,85,88];
 
 // Office palette
 const P = {
+  colorblind:  ['#0072b2','#e69f00','#009e73','#d55e00','#56b4e9','#cc79a7','#f0e442','#000000','#999999','#332288'],
   office:      ['#0078d4','#00b4d8','#107c10','#ffb900','#d13438','#8764b8','#038387','#e3008c','#004578','#69797e'],
   vibrant:     ['#e63946','#f4a261','#2a9d8f','#457b9d','#e9c46a','#264653','#a8dadc','#f77f00','#023e8a','#9b2226'],
   pastel:      ['#a8d8ea','#aa96da','#fcbad3','#ffdac1','#b5ead7','#c7ceea','#e2f0cb','#ffb7b2','#ff9aa2','#ffffd2'],
@@ -1955,7 +1975,7 @@ new Chart(document.getElementById('c-labels'), {
 
 // ─── Feature: Color palettes (mini swatches) ─────────────────────
 const paletteGrid = document.getElementById('palette-grid');
-Object.entries(P).forEach(([name, colors]) => {
+['office','vibrant','pastel','monochrome','trafficLight','warm','cool','colorblind'].map(n => [n, P[n]]).forEach(([name, colors]) => {
   const div = document.createElement('div');
   div.style.cssText = 'text-align:center;';
   div.innerHTML = `

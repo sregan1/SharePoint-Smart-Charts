@@ -10,6 +10,9 @@ import {
   PropertyPaneSlider,
   PropertyPaneLabel,
   PropertyPaneDropdownOptionType,
+  PropertyPaneDynamicField,
+  PropertyPaneDynamicFieldSet,
+  DynamicDataSharedDepth,
 } from '@microsoft/sp-property-pane';
 import { BaseClientSideWebPart } from '@microsoft/sp-webpart-base';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
@@ -22,13 +25,14 @@ import {
   IChartSelection,
 } from './components/ISharePointSmartChartsProps';
 import * as strings from 'SharePointSmartChartsWebPartStrings';
-import { ChartType } from './types';
+import { ChartType, supportsDualAxis, supportsErrorBars } from './types';
 
 export default class SharePointSmartChartsWebPart
   extends BaseClientSideWebPart<ISharePointSmartChartsWebPartProps>
   implements IDynamicDataCallables {
 
   private _isDarkTheme: boolean = false;
+  private _partReady: boolean = false;
   private _selection: IChartSelection = { category: '', value: null, series: '' };
 
   // ---- Dynamic Data source: lets other web parts react to chart clicks ----
@@ -57,7 +61,16 @@ export default class SharePointSmartChartsWebPart
     this.context.dynamicDataSourceManager.notifyPropertyChanged('selectedSeries');
   };
 
+  // Value published by another web part's Dynamic Data source, or '' when unconnected
+  private _getExternalFilterValue(): string {
+    const dp = this.properties.externalFilter;
+    if (!dp) return '';
+    const v = dp.tryGetValue();
+    return v === undefined || v === null ? '' : String(v);
+  }
+
   public render(): void {
+    if (!this._partReady) return; // SPFx renders again once onInit resolves
     const p = this.properties;
     const element: React.ReactElement<ISharePointSmartChartsProps> = React.createElement(
       SharePointSmartCharts,
@@ -112,6 +125,7 @@ export default class SharePointSmartChartsWebPart
         rowLimit: p.rowLimit || 0,
         filterColumn: p.filterColumn || '',
         filterValue: p.filterValue || '',
+        filterOperator: p.filterOperator || 'contains',
         // Aggregation
         groupByColumn: p.groupByColumn || '',
         aggregation: p.aggregation || 'none',
@@ -161,6 +175,19 @@ export default class SharePointSmartChartsWebPart
         significancePairs: p.significancePairs || '',
         // Bubble size legend
         showBubbleSizeLegend: p.showBubbleSizeLegend || false,
+        // Waterfall
+        waterfallShowTotal: p.waterfallShowTotal || false,
+        waterfallPositiveColor: p.waterfallPositiveColor || '',
+        waterfallNegativeColor: p.waterfallNegativeColor || '',
+        waterfallTotalColor: p.waterfallTotalColor || '',
+        // Dual axis number formatting
+        y2ValuePrefix: p.y2ValuePrefix || '',
+        y2ValueSuffix: p.y2ValueSuffix || '',
+        // Annotations
+        annotations: p.annotations || '',
+        // Dynamic Data consumer
+        externalFilterColumn: p.externalFilterColumn || '',
+        externalFilterValue: this._getExternalFilterValue(),
         // Framework
         context: this.context,
         isDarkTheme: this._isDarkTheme,
@@ -177,6 +204,11 @@ export default class SharePointSmartChartsWebPart
           const self = this as unknown as { _afterPropertyUpdated?: (shouldRefresh: boolean) => void };
           if (typeof self._afterPropertyUpdated === 'function') {
             self._afterPropertyUpdated(true);
+          } else {
+            // Internal hook missing (SPFx upgrade?) — edits won't persist on Publish.
+            // eslint-disable-next-line no-console
+            console.error('SharePoint Smart Charts: _afterPropertyUpdated is unavailable; inline edits may not be saved.');
+            this.render();
           }
         },
         onItemSelected: this._handleItemSelected,
@@ -186,20 +218,35 @@ export default class SharePointSmartChartsWebPart
     ReactDom.render(element, this.domElement);
   }
 
-  protected onInit(): Promise<void> {
+  protected async onInit(): Promise<void> {
+    await super.onInit();
     this.context.dynamicDataSourceManager.initializeSource(this);
-    return super.onInit();
+    this._partReady = true;
+  }
+
+  // Relative luminance of a #rgb/#rrggbb color (0 = black, 1 = white); -1 if unparseable
+  private _luminance(color: string | undefined): number {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec((color || '').trim());
+    if (!m) return -1;
+    const h = m[1].length === 3 ? m[1].split('').map(c => c + c).join('') : m[1];
+    const [r, g, b] = [0, 2, 4].map(i => parseInt(h.substr(i, 2), 16) / 255);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   }
 
   protected onThemeChanged(currentTheme: IReadonlyTheme | undefined): void {
     if (!currentTheme) return;
-    this._isDarkTheme = !!currentTheme.isInverted;
     const { semanticColors } = currentTheme;
+    // "Strong" section variants may be dark without isInverted being set
+    const bgLuminance = this._luminance(semanticColors?.bodyBackground);
+    this._isDarkTheme = !!currentTheme.isInverted || (bgLuminance >= 0 && bgLuminance < 0.4);
     if (semanticColors) {
       this.domElement.style.setProperty('--bodyText', semanticColors.bodyText || null);
       this.domElement.style.setProperty('--link', semanticColors.link || null);
       this.domElement.style.setProperty('--linkHovered', semanticColors.linkHovered || null);
     }
+    // SPFx raises the first theme change before onInit, when this.properties
+    // and this.displayMode aren't safe to read — SPFx renders after onInit anyway.
+    if (this._partReady) this.render();
   }
 
   protected onDispose(): void {
@@ -275,6 +322,7 @@ export default class SharePointSmartChartsWebPart
 
     const colorPalettes = [
       { key: 'office', text: strings.PaletteOfficeLabel },
+      { key: 'colorblind', text: strings.PaletteColorblindLabel },
       { key: 'vibrant', text: strings.PaletteVibrantLabel },
       { key: 'pastel', text: strings.PalettePastelLabel },
       { key: 'monochrome', text: strings.PaletteMonochromeLabel },
@@ -532,7 +580,7 @@ export default class SharePointSmartChartsWebPart
               ],
             },
             ] : []),
-            ...(['bar', 'horizontalBar', 'line', 'area'].indexOf(currentType) >= 0 ? [
+            ...(supportsDualAxis(currentType as ChartType) ? [
             {
               groupName: strings.DualAxisGroupName,
               groupFields: [
@@ -549,8 +597,18 @@ export default class SharePointSmartChartsWebPart
                   label: strings.LogScaleY2FieldLabel,
                   checked: this.properties.logScaleY2 || false,
                 }),
+                PropertyPaneTextField('y2ValuePrefix', {
+                  label: strings.Y2ValuePrefixFieldLabel,
+                  placeholder: strings.ValuePrefixPlaceholder,
+                }),
+                PropertyPaneTextField('y2ValueSuffix', {
+                  label: strings.Y2ValueSuffixFieldLabel,
+                  placeholder: strings.ValueSuffixPlaceholder,
+                }),
               ],
             },
+            ] : []),
+            ...(supportsErrorBars(currentType as ChartType) ? [
             {
               groupName: strings.ErrorBarsGroupName,
               groupFields: [
@@ -572,6 +630,60 @@ export default class SharePointSmartChartsWebPart
               ],
             },
             ] : []),
+            ...(currentType === 'waterfall' ? [
+            {
+              groupName: strings.WaterfallGroupName,
+              groupFields: [
+                PropertyPaneToggle('waterfallShowTotal', {
+                  label: strings.WaterfallShowTotalFieldLabel,
+                  checked: this.properties.waterfallShowTotal || false,
+                }),
+                PropertyPaneTextField('waterfallPositiveColor', {
+                  label: strings.WaterfallPositiveColorFieldLabel,
+                  placeholder: strings.AutoPlaceholder,
+                  onGetErrorMessage: (value: string) => this._validateOptionalColor(value),
+                }),
+                PropertyPaneTextField('waterfallNegativeColor', {
+                  label: strings.WaterfallNegativeColorFieldLabel,
+                  placeholder: '#d13438',
+                  onGetErrorMessage: (value: string) => this._validateOptionalColor(value),
+                }),
+                PropertyPaneTextField('waterfallTotalColor', {
+                  label: strings.WaterfallTotalColorFieldLabel,
+                  placeholder: '#69797e',
+                  onGetErrorMessage: (value: string) => this._validateOptionalColor(value),
+                }),
+              ],
+            },
+            ] : []),
+            ...(['bar', 'line', 'area'].indexOf(currentType) >= 0 ? [
+            {
+              groupName: strings.AnnotationsGroupName,
+              groupFields: [
+                PropertyPaneTextField('annotations', {
+                  label: strings.AnnotationsFieldLabel,
+                  placeholder: strings.AnnotationsPlaceholder,
+                  description: strings.AnnotationsHelp,
+                  multiline: true,
+                  rows: 4,
+                }),
+              ],
+            },
+            ] : []),
+            {
+              groupName: strings.ExternalFilterGroupName,
+              groupFields: [
+                PropertyPaneDynamicFieldSet({
+                  label: strings.ExternalFilterFieldLabel,
+                  fields: [PropertyPaneDynamicField('externalFilter', { label: strings.ExternalFilterFieldLabel })],
+                  sharedConfiguration: { depth: DynamicDataSharedDepth.Property },
+                }),
+                PropertyPaneTextField('externalFilterColumn', {
+                  label: strings.ExternalFilterColumnFieldLabel,
+                  placeholder: strings.ExternalFilterColumnPlaceholder,
+                }),
+              ],
+            },
             ...(currentType === 'bar' ? [
             {
               groupName: strings.SignificanceGroupName,
@@ -654,8 +766,8 @@ export default class SharePointSmartChartsWebPart
                   max: 60,
                   step: 5,
                   value: this.properties.cacheMinutes || 0,
-                  // Only the REST/Graph loaders consult the session cache.
-                  disabled: ['restApi', 'graphApi'].indexOf(this.properties.dataSourceType || 'upload') < 0,
+                  // Every network loader consults the session cache; uploads don't.
+                  disabled: (this.properties.dataSourceType || 'upload') === 'upload',
                 }),
               ],
             },

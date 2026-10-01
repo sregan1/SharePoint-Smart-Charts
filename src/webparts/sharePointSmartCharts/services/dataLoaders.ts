@@ -3,14 +3,15 @@ import { spfi, SPFx } from '@pnp/sp';
 import '@pnp/sp/webs';
 import '@pnp/sp/lists';
 import '@pnp/sp/items';
+import '@pnp/sp/fields';
 import * as Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import * as strings from 'SharePointSmartChartsWebPartStrings';
 import { IChartRecord, fmt } from '../types';
 
-// SharePoint REST returns at most this many items per request; results at this
-// count are likely truncated.
-export const SP_LIST_ROW_LIMIT = 5000;
+// Lists are paged (5,000 items per REST request) and loaded up to this many
+// rows in total; beyond it the result is flagged as truncated.
+export const SP_LIST_ROW_LIMIT = 20000;
 
 export interface ILoadResult {
   rows: IChartRecord[];
@@ -85,24 +86,98 @@ const SP_INTERNAL_FIELDS = new Set([
   'ServerRedirectedEmbedUrl',
 ]);
 
+const SP_PAGE_SIZE = 5000;
+
+interface ISpField {
+  InternalName: string;
+  TypeAsString: string;
+  LookupField?: string;
+}
+
+// Lookup/person fields come back as nested objects (or arrays of them) that
+// can't be charted. Expand them so the display text (person name / lookup
+// value) is available, keyed by the same internal name as before.
+const loadExpandableFields = async (
+  sp: ReturnType<typeof spfi>,
+  listName: string
+): Promise<ISpField[]> => {
+  try {
+    const fields = (await sp.web.lists.getByTitle(listName).fields
+      .filter('Hidden eq false')
+      .select('InternalName', 'TypeAsString', 'LookupField')()) as ISpField[];
+    return fields.filter(f =>
+      ['Lookup', 'LookupMulti', 'User', 'UserMulti'].indexOf(f.TypeAsString) >= 0 &&
+      // Read-only system lookups (e.g. "Content Type") aren't expandable
+      f.InternalName !== 'ContentType');
+  } catch {
+    return []; // metadata is a nicety — fall back to the plain item load
+  }
+};
+
+const flattenExpanded = (value: unknown, textField: string): string | undefined => {
+  const pick = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    if (typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      const t = o[textField] ?? o.Title ?? o.LookupValue;
+      return t === null || t === undefined ? '' : String(t);
+    }
+    return String(v);
+  };
+  if (value === null || value === undefined) return undefined;
+  if (Array.isArray(value)) return value.map(pick).filter(Boolean).join('; ');
+  return pick(value);
+};
+
 export const loadSharePointList = async (
   context: WebPartContext,
   siteUrl: string,
   listName: string
 ): Promise<ILoadResult> => {
   const sp = spfi(siteUrl || context.pageContext.web.absoluteUrl).using(SPFx(context));
-  const rawRows = (await sp.web.lists
-    .getByTitle(listName)
-    .items.select('*')
-    .top(SP_LIST_ROW_LIMIT)()) as IChartRecord[];
-  const rows = rawRows.map(row => {
+  const list = sp.web.lists.getByTitle(listName);
+  const expandable = await loadExpandableFields(sp, listName);
+
+  let query = list.items.select('*').top(SP_PAGE_SIZE);
+  if (expandable.length) {
+    const selects = expandable.map(f => `${f.InternalName}/${f.TypeAsString.indexOf('User') === 0 ? 'Title' : (f.LookupField || 'Title')}`);
+    query = list.items
+      .select('*', ...selects)
+      .expand(...expandable.map(f => f.InternalName))
+      .top(SP_PAGE_SIZE);
+  }
+
+  // Follow paging so lists larger than one REST page load in full, up to the cap
+  const rawRows: IChartRecord[] = [];
+  let page = await query.getPaged();
+  let more = false;
+  for (;;) {
+    for (const item of page.results as IChartRecord[]) rawRows.push(item);
+    if (!page.hasNext) break;
+    if (rawRows.length >= SP_LIST_ROW_LIMIT) { more = true; break; }
+    page = await page.getNext();
+  }
+
+  const textFieldFor = new Map<string, string>();
+  expandable.forEach(f => textFieldFor.set(
+    f.InternalName, f.TypeAsString.indexOf('User') === 0 ? 'Title' : (f.LookupField || 'Title')));
+
+  const capped = rawRows.slice(0, SP_LIST_ROW_LIMIT);
+  const rows = capped.map(row => {
     const out: IChartRecord = {};
     for (const key of Object.keys(row)) {
-      if (!SP_INTERNAL_FIELDS.has(key)) out[key] = row[key];
+      if (SP_INTERNAL_FIELDS.has(key)) continue;
+      const textField = textFieldFor.get(key);
+      if (textField !== undefined) {
+        const flat = flattenExpanded(row[key] as unknown, textField);
+        if (flat !== undefined) out[key] = flat;
+      } else {
+        out[key] = row[key];
+      }
     }
     return out;
   });
-  return { rows, truncated: rows.length >= SP_LIST_ROW_LIMIT };
+  return { rows, truncated: more || rawRows.length > SP_LIST_ROW_LIMIT };
 };
 
 const FETCH_TIMEOUT_MS = 30_000;
@@ -217,6 +292,14 @@ export const loadGraphApi = async (
 // handlers, so they can never drift apart and target different entries.
 export const buildCacheKey = (srcType: string, dataUrl: string, dataPath?: string): string =>
   `${srcType}|${dataUrl}|${dataPath || ''}`;
+
+// A SharePoint list has no URL of its own — its site + list name identify the
+// entry. Every source type funnels through here so keys can never drift.
+export const buildCacheKeyForConfig = (cfg: {
+  dataSourceType: string; siteUrl: string; listName: string; dataUrl: string; dataPath: string;
+}): string => cfg.dataSourceType === 'sharePointList'
+  ? buildCacheKey('sharePointList', `${cfg.siteUrl}|${cfg.listName}`)
+  : buildCacheKey(cfg.dataSourceType, cfg.dataUrl, cfg.dataPath);
 
 const CACHE_PREFIX = 'sdv-cache:';
 

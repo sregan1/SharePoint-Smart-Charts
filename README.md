@@ -1,6 +1,6 @@
 # SharePoint Smart Charts
 
-[![Version](https://img.shields.io/badge/version-1.3.1-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/sharepoint-smart-charts) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.4.0-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/sharepoint-smart-charts) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A SharePoint Framework (SPFx) web part that renders interactive charts from multiple data sources with no coding required — 17 chart types, drill-down, bookmarks, trendlines, and click-to-filter integration, all configured through the SharePoint page editor.
 
@@ -21,9 +21,9 @@ The property pane is organized into three focused pages — **Chart**, **Appeara
 | Source | Description |
 |---|---|
 | **Upload File** | Upload a CSV, TSV, or Excel (.xlsx / .xls) file directly from your computer. Data persists across page reloads (up to 200 KB). Multi-sheet workbooks get a sheet picker. |
-| **SharePoint List** | Load data from any SharePoint list on the current or another site (up to 5,000 items, with a warning when truncated) |
+| **SharePoint List** | Load data from any SharePoint list on the current or another site — paged past the 5,000-item request limit, up to 20,000 rows (with a warning when truncated). Lookup and person columns are flattened to their display text |
 | **SharePoint File** | Reference a CSV or Excel file stored in a SharePoint document library by URL |
-| **REST API** | Connect to any REST endpoint that returns JSON, with optional response caching |
+| **REST API** | Connect to any REST endpoint that returns JSON |
 | **Microsoft Graph** | Chart any Graph endpoint (e.g. `/me/memberOf`) — requires admin-approved permissions |
 
 ### Chart Types
@@ -53,42 +53,44 @@ The property pane is organized into three focused pages — **Chart**, **Appeara
 ### Data Shaping & Analytics
 
 - **Group-by aggregation** — Sum, Average, Count, Min, or Max per category, applied before charting
-- **Sort, filter, and row limit** — shape the data inline without touching the source
+- **Sort, filter, and row limit** — shape the data inline without touching the source; filters support contains, equals, does not equal, greater/less than, between, and is empty / is not empty
 - **Trendlines & forecast** — linear regression or moving average overlays; project the trend up to 12 periods ahead
 - **Reference lines** — fixed value, mean, or median drawn as a dashed line
 - **Date/time X axis** — date columns are auto-detected and plotted on a true time scale
 - **Logarithmic axes** — Y axis on most chart types, X axis on Scatter/Bubble, independently on a secondary axis
 - **Conditional formatting** — highlight values above or below a threshold in a custom color
 - **Combo charts** — mix bars and lines per series on the same chart
-- **Dual Y axis** — plot a subset of series against a second, independently scaled right-hand axis (Bar, Line, Area)
-- **Error bars** — standard deviation, standard error, or a custom per-row margin column (Bar, Line, Area)
+- **Dual Y axis** — plot a subset of series against a second, independently scaled right-hand axis with its own prefix/suffix (Bar, Line, Area)
+- **Error bars** — standard deviation, standard error (per group when averaged), or a custom per-row margin column (Bar, Horizontal Bar, Line, Area)
 - **Significance brackets** — annotate statistical comparisons between bar groups with a label, e.g. `*` or `p<0.05` (Bar)
+- **Annotations** — dashed vertical markers with a note at chosen X values, e.g. a launch date (Bar, Line, Area)
+- **Waterfall total bar** — optional cumulative total with configurable increase / decrease / total colors
 
 ### Interactivity
 
 ![Drill-down with breadcrumb navigation](screenshots/feature-drilldown.png)
 
-- **Viewer filters** — opt-in filter bar so page visitors can slice the data themselves
+- **Viewer filters** — opt-in filter bar so page visitors can slice the data themselves: choose an operator, pick from a value dropdown, and combine multiple filters
 - **Details on demand** — click a bar or slice to see the underlying rows
 - **Drill-down** — define a column hierarchy (e.g. Region → Country → City) and click to drill, with breadcrumb navigation
 - **Bookmarks** — save named view states; viewers pick them from a dropdown
-- **Dynamic Data** — chart clicks publish the selected category/value/series to connected web parts
+- **Dynamic Data** — chart clicks publish the selected category/value/series to connected web parts, and the chart can itself be filtered by another web part's published value (cross-chart filtering)
 - **Custom tooltips** — append extra columns from the hovered row
-- **Auto-refresh & caching** — reload network sources on an interval, cache API responses per session
+- **Auto-refresh & caching** — reload network sources on an interval, cache loaded data per session
 
 ### Other Features
 
 - **Web part header** — optional title above the chart, toggled from the property pane
-- **7 color palettes** — Office, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool — plus per-series color overrides and color-by-category for scatter/bubble
-- **Data labels** — optional value annotations with prefix/suffix and K/M abbreviation
+- **8 color palettes** — Office, Colorblind-safe, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool — plus per-series color overrides and color-by-category for scatter/bubble
+- **Data labels & number formatting** — optional value annotations with prefix/suffix and K/M abbreviation, also applied to axis numbers and tooltips on Bar, Line, and Area charts
 - **Stacked bars** — toggle stacking on Bar and Line charts
 - **Step interpolation** — render Line/Area charts with stepped segments instead of straight/smooth ones
 - **Data point overlay** — show individual value markers on top of Bar/Horizontal Bar charts
 - **Bubble size legend** — optional small/medium/large size key for the Bubble chart
-- **Data table** — optional tabular view below the chart, paginated
+- **Data table** — optional tabular view below the chart, paginated; viewers can toggle it with **View as table**
 - **Export** — download as PNG, JPEG, CSV (UTF-8 with BOM, Excel-safe), or Excel from every chart
 - **Dark theme support** — chart colors adapt to dark section backgrounds
-- **Localized & accessible** — all UI strings localizable; screen-reader-friendly charts and forms
+- **30 languages & accessible** — the interface follows each user's Microsoft 365 display language (English, Arabic, Chinese Simplified & Traditional, Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian Bokmål, Polish, Portuguese Brazil & Portugal, Romanian, Russian, Spanish, Swedish, Thai, Turkish, Ukrainian, Vietnamese); arrow-key navigation between chart data points with screen-reader announcements, and screen-reader-friendly charts and forms
 
 ---
 
@@ -224,9 +226,9 @@ The pane is organized into three pages — **Chart**, **Appearance**, and **Adva
 
 | Setting | Default | Description |
 |---|---|---|
-| **Color Palette** | Office | 7 palettes: Office, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool |
+| **Color Palette** | Office | 8 palettes: Office, Colorblind-safe, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool |
 | **Show Data Labels** | Off | Annotate each data point with its value |
-| **Value Prefix / Suffix** | _(blank)_ | Text around each label (e.g. `$`, `%`) |
+| **Value Prefix / Suffix** | _(blank)_ | Text around each label, axis number, and tooltip value on Bar, Line, and Area (e.g. `$`, `%`) |
 | **Decimal Places** | 0 | Decimal places shown (0–4) |
 | **Abbreviate Numbers (K/M)** | Off | Abbreviates 1,000 → 1K, 1,000,000 → 1M, 1,000,000,000 → 1B |
 | **Y Axis Minimum / Maximum** | _(auto)_ | Override the Y axis range (validated numeric) |
@@ -248,16 +250,20 @@ The pane is organized into three pages — **Chart**, **Appearance**, and **Adva
 | **Fixed Value / Line Color** | _(blank)_ / `#666666` | Value and color for the reference line |
 | **Right-axis series** | _(blank)_ | Comma-separated column names plotted against a second, right-hand Y axis — Bar, Line, Area only |
 | **Right axis label / Log Scale (Right Axis)** | _(blank)_ / Off | Caption and optional log scale for the right axis |
-| **Error Bar Type** | None | None, Custom column (±), Std Dev (computed), or Std Error of Mean (computed) — Bar, Line, Area only |
+| **Y2 Value Prefix / Suffix** | _(blank)_ | Prefix/suffix for the right axis, its labels, and tooltips; blank inherits the main setting |
+| **Error Bar Type** | None | None, Custom column (±), Std Dev (computed), or Std Error of Mean (computed) — Bar, Horizontal Bar, Line, Area only |
 | **Error value column** | _(blank)_ | Column holding the per-row ± margin — only used when Error Bar Type is Custom |
 | **Bracket pairs** (Significance Brackets) | _(blank)_ | Newline-delimited `col1,col2,label` (or a JSON array) — draws an annotation bracket between two bar categories, e.g. `GroupA,GroupB,*` — Bar chart only |
-| **Show Filters to Viewers** | Off | Filter bar for page visitors in view mode |
+| **Annotations** | _(blank)_ | One `xValue, note` per line — draws a dashed vertical marker with the note at that X value — Bar, Line, Area only |
+| **Waterfall: Show Total Bar / colors** | Off / auto | Append a cumulative total bar; Increase, Decrease, and Total colors (hex) — Waterfall only |
+| **Filter from Another Web Part** | _(none)_ | Connect to another web part's Dynamic Data value; **Column to Filter** defaults to the X-axis column |
+| **Show Filters to Viewers** | Off | Filter bar (operators, multiple filters) for page visitors in view mode |
 | **Details on Demand** | Off | Clicking a chart element shows its underlying rows |
 | **Overlay Data Points on Bars** | Off | Show individual value markers on top of bars — Bar, Horizontal Bar only |
 | **Show Bubble Size Legend** | Off | Small/medium/large size key for the Bubble chart |
 | **Threshold Value / Direction / Color** | _(off)_ / Below / `#d13438` | Highlight values crossing a threshold |
 | **Auto-Refresh Interval** | 0 (off) | Reload network sources every N minutes — disabled for the Upload File source |
-| **Cache API Results** | 0 (off) | Cache REST/Graph responses for N minutes per session — only applies to the REST API and Microsoft Graph sources |
+| **Cache Data** | 0 (off) | Cache loaded data for N minutes per session — applies to every source except Upload File |
 
 ### Inline Advanced Options panel (while editing)
 
@@ -267,6 +273,8 @@ The pane is organized into three pages — **Chart**, **Appearance**, and **Adva
 | **Tooltip Columns** | Extra columns appended to the hover tooltip |
 | **Drill Levels 1–3** | Column hierarchy for click-to-drill navigation |
 | **Bookmarks** | Save, apply, and delete named view states |
+
+The inline **Data Controls** panel offers Sort, Row Limit, Group by / Aggregation, and a Filter with an operator (contains, equals, does not equal, greater than, less than, between `low..high`, is empty, is not empty).
 
 ---
 
@@ -341,14 +349,16 @@ sharepoint-smart-charts/
 │           │   ├── ColumnMapper.tsx                  # Column → axis mapping, per-series colors/types
 │           │   ├── DataControls.tsx                  # Sort, filter, limit, group-by aggregation
 │           │   ├── AdvancedOptions.tsx               # Color-by, tooltips, drill hierarchy, bookmarks
-│           │   ├── ChartRenderer.tsx                 # Chart.js rendering — all 17 chart types
+│           │   ├── ChartRenderer.tsx                 # Chart.js rendering — all 17 chart types, keyboard navigation
+│           │   ├── ChartErrorBoundary.tsx            # Contains chart runtime errors to an inline message
+│           │   ├── ViewerFilters.tsx                 # View-mode filter rows (operators, multiple filters)
 │           │   ├── DataTable.tsx                     # Tabular data view
 │           │   ├── ExportBar.tsx                     # PNG / JPEG / CSV / Excel export
 │           │   └── SharePointSmartCharts.module.scss
 │           ├── services/
 │           │   └── dataLoaders.ts                    # Shared loaders: list, file, REST, Graph, cache
 │           ├── types/index.ts                        # Shared TypeScript types
-│           └── loc/                                  # Localization strings
+│           └── loc/                                  # Localization: mystrings.d.ts + one .js per locale (30 languages)
 ├── CHANGELOG.md
 ├── USER-GUIDE.md
 ├── package.json
@@ -379,14 +389,14 @@ sharepoint-smart-charts/
 
 - **"Scatter and bubble charts need numeric values…"** — the mapped X or Y column contains no numbers. Pick a numeric column in the Column Mapping panel.
 - **Microsoft Graph source returns 401/403** — the Graph permission request has not been approved, or your endpoint needs a scope not listed in `package-solution.json`. See [Graph API Permissions](#graph-api-permissions).
-- **"This list has 5,000 or more items…"** — SharePoint returns at most 5,000 items per request. Filter the list with a view-backed approach or aggregate the data upstream.
+- **A warning says only the first rows of a list were loaded** — lists load in pages up to 20,000 rows. For larger lists, filter with a view-backed approach or aggregate the data upstream.
 - **Arrows or accented characters look garbled in an exported CSV** — fixed in 1.1.0; exports now include a UTF-8 BOM. Re-export with the current version.
 ---
 
 ## Limitations
 
 - **Upload file data size:** Uploaded file data is serialized to the web part property bag. Datasets up to 200 KB persist across page reloads. Larger files display for the current session only — store them in a SharePoint document library and use the SharePoint File source for fully persistent large datasets.
-- **SharePoint list size:** A maximum of 5,000 items is loaded per list (SharePoint REST limit); a warning is shown when this cap is hit.
+- **SharePoint list size:** Lists are paged and loaded up to 20,000 rows; a warning is shown to editors (and a note to viewers) when this cap is hit.
 - **Microsoft Graph:** Requires tenant-admin approval of Graph permissions; without approval the Graph source cannot load data.
 - **Direct database connections:** SPFx cannot connect directly to databases. Use a REST API (e.g., Azure Function or custom API) that queries your database and returns JSON.
 - **Cross-origin REST APIs:** The browser's same-origin policy applies. For external APIs, ensure CORS headers are configured on the server.

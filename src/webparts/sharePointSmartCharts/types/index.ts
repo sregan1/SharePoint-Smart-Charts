@@ -76,6 +76,8 @@ export const CHART_COLORS: string[] = [
 ];
 
 export const PALETTES: Record<string, string[]> = {
+  // Okabe-Ito: distinguishable under the common forms of color blindness
+  colorblind:  ['#0072b2','#e69f00','#009e73','#d55e00','#56b4e9','#cc79a7','#f0e442','#000000','#999999','#332288'],
   office:      ['#0078d4','#00b4d8','#107c10','#ffb900','#d13438','#8764b8','#038387','#e3008c','#004578','#69797e'],
   vibrant:     ['#e63946','#f4a261','#2a9d8f','#457b9d','#e9c46a','#264653','#a8dadc','#f77f00','#023e8a','#9b2226'],
   pastel:      ['#a8d8ea','#aa96da','#fcbad3','#ffffd2','#b5ead7','#ffdac1','#c7ceea','#e2f0cb','#ffb7b2','#ff9aa2'],
@@ -128,6 +130,8 @@ export interface IBookmark {
     aggregation: string;
     xColumn: string;
     yColumns: string;
+    // Optional so bookmarks saved before filter operators existed still load
+    filterOperator?: string;
   };
 }
 
@@ -147,6 +151,62 @@ export const parseBookmarks = (json: string): IBookmark[] => {
   }
 };
 
+// ---- Row filters ----
+
+export type FilterOperator =
+  | 'contains' | 'equals' | 'notEquals' | 'gt' | 'lt' | 'between' | 'isEmpty' | 'notEmpty';
+
+export const FILTER_OPERATORS: FilterOperator[] =
+  ['contains', 'equals', 'notEquals', 'gt', 'lt', 'between', 'isEmpty', 'notEmpty'];
+
+export const operatorNeedsValue = (op: string): boolean => op !== 'isEmpty' && op !== 'notEmpty';
+
+export interface IRowFilter {
+  column: string;
+  operator: string;
+  value: string;
+}
+
+const isBlank = (v: unknown): boolean => v === null || v === undefined || v === '';
+
+// Numbers compare as numbers, parseable dates as dates, everything else as text
+const compareCell = (cell: unknown, target: string): number => {
+  const cn = Number(cell), tn = Number(target);
+  if (!isBlank(cell) && target.trim() !== '' && !isNaN(cn) && !isNaN(tn)) return cn - tn;
+  const cd = Date.parse(String(cell)), td = Date.parse(target);
+  if (typeof cell === 'string' && isNaN(cn) && !isNaN(cd) && !isNaN(td)) return cd - td;
+  return String(cell ?? '').toLowerCase().localeCompare(target.toLowerCase());
+};
+
+export const rowMatchesFilter = (row: IChartRecord, f: IRowFilter): boolean => {
+  const cell = row[f.column];
+  switch (f.operator || 'contains') {
+    case 'isEmpty': return isBlank(cell);
+    case 'notEmpty': return !isBlank(cell);
+    case 'equals': return compareCell(cell, f.value) === 0;
+    case 'notEquals': return compareCell(cell, f.value) !== 0;
+    case 'gt': return !isBlank(cell) && compareCell(cell, f.value) > 0;
+    case 'lt': return !isBlank(cell) && compareCell(cell, f.value) < 0;
+    case 'between': {
+      // "low..high" (inclusive)
+      const parts = f.value.split('..');
+      if (parts.length !== 2 || isBlank(cell)) return false;
+      return compareCell(cell, parts[0].trim()) >= 0 && compareCell(cell, parts[1].trim()) <= 0;
+    }
+    default:
+      return String(cell ?? '').toLowerCase().indexOf(f.value.toLowerCase()) >= 0;
+  }
+};
+
+// A filter is active when it has a column and — for operators that take one — a value
+export const isFilterActive = (f: IRowFilter): boolean =>
+  !!f.column && (!operatorNeedsValue(f.operator || 'contains') || f.value !== '');
+
+export const applyFilters = (rows: IChartRecord[], filters: IRowFilter[]): IChartRecord[] => {
+  const active = filters.filter(isFilterActive);
+  return active.length ? rows.filter(r => active.every(f => rowMatchesFilter(r, f))) : rows;
+};
+
 // Substitute {0}, {1}, … placeholders in localized string templates.
 export const fmt = (template: string, ...args: (string | number)[]): string =>
   template.replace(/\{(\d+)\}/g, (match, idx) => {
@@ -154,12 +214,21 @@ export const fmt = (template: string, ...args: (string | number)[]): string =>
     return arg !== undefined ? String(arg) : match;
   });
 
+// Prefix of the per-group error columns emitted when averages are aggregated with SD/SEM error bars
+export const ERROR_COLUMN_PREFIX = '__err_';
+
+// A user-entered color as an opaque 6-digit hex (safe to suffix with an alpha byte)
+export const toSolidHex = (color: string, fallback: string): string => {
+  const c = normalizeHexColor((color || '').trim());
+  return /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(c) ? c.slice(0, 7) : fallback;
+};
+
 // Expand a 3-digit hex ('#abc') to 6-digit ('#aabbcc'). ChartRenderer builds
 // translucent fills by concatenating an alpha suffix directly onto these
 // colors (e.g. `${color}cc`), which only produces a valid 8-digit hex color
 // when the base is already 6 digits — a 3-digit override would silently
 // produce an invalid color that canvas ignores.
-const normalizeHexColor = (color: string): string => {
+export const normalizeHexColor = (color: string): string => {
   const m = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(color);
   return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : color;
 };

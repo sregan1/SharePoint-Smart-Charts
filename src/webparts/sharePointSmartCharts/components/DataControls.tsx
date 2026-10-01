@@ -1,5 +1,7 @@
 import * as React from 'react';
 import * as strings from 'SharePointSmartChartsWebPartStrings';
+import { FILTER_OPERATORS, operatorNeedsValue } from '../types';
+import { FILTER_OPERATOR_LABELS } from './ViewerFilters';
 import styles from './SharePointSmartCharts.module.scss';
 
 interface IDataControlsProps {
@@ -9,6 +11,7 @@ interface IDataControlsProps {
   rowLimit: number;
   filterColumn: string;
   filterValue: string;
+  filterOperator: string;
   groupByColumn: string;
   aggregation: string;
   showAdvanced: boolean;
@@ -18,6 +21,7 @@ interface IDataControlsProps {
     rowLimit?: number;
     filterColumn?: string;
     filterValue?: string;
+    filterOperator?: string;
     groupByColumn?: string;
     aggregation?: string;
   }) => void;
@@ -39,6 +43,7 @@ const DataControls: React.FC<IDataControlsProps> = ({
   rowLimit,
   filterColumn,
   filterValue,
+  filterOperator,
   groupByColumn,
   aggregation,
   showAdvanced,
@@ -127,14 +132,27 @@ const DataControls: React.FC<IDataControlsProps> = ({
           </select>
         </div>
         <div className={styles.fieldGroup}>
-          <label htmlFor={`${idPrefix}-filterval`}>{strings.FilterContainsLabel}</label>
+          <label htmlFor={`${idPrefix}-filterop`}>{strings.FilterOperatorLabel}</label>
+          <select
+            id={`${idPrefix}-filterop`}
+            value={filterOperator || 'contains'}
+            onChange={e => onChange({ filterOperator: e.target.value })}
+            disabled={!filterColumn}
+          >
+            {FILTER_OPERATORS.map(op => (
+              <option key={op} value={op}>{FILTER_OPERATOR_LABELS[op]}</option>
+            ))}
+          </select>
+        </div>
+        <div className={styles.fieldGroup}>
+          <label htmlFor={`${idPrefix}-filterval`}>{strings.FilterValueLabel}</label>
           <input
             id={`${idPrefix}-filterval`}
             type="text"
             value={filterValue}
             onChange={e => onChange({ filterValue: e.target.value })}
-            placeholder={strings.FilterValuePlaceholder}
-            disabled={!filterColumn}
+            placeholder={filterOperator === 'between' ? '10..20' : strings.FilterValuePlaceholder}
+            disabled={!filterColumn || !operatorNeedsValue(filterOperator || 'contains')}
           />
         </div>
       </div>

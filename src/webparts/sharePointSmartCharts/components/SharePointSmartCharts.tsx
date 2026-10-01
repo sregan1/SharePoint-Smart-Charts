@@ -6,6 +6,9 @@ import {
   IColumnConfig,
   IDataSourceConfig,
   IBookmark,
+  IRowFilter,
+  applyFilters,
+  ERROR_COLUMN_PREFIX,
   parseBookmarks,
   extractColumns,
   fmt,
@@ -19,12 +22,14 @@ import {
   getCachedRows,
   setCachedRows,
   clearCachedRows,
-  buildCacheKey,
+  buildCacheKeyForConfig,
 } from '../services/dataLoaders';
 import DataSourcePanel from './DataSourcePanel';
+import ViewerFilters from './ViewerFilters';
 import ColumnMapper from './ColumnMapper';
 import DataControls from './DataControls';
 import ChartRenderer from './ChartRenderer';
+import ChartErrorBoundary from './ChartErrorBoundary';
 import DataTable from './DataTable';
 import styles from './SharePointSmartCharts.module.scss';
 
@@ -41,6 +46,7 @@ interface ISharePointSmartChartsState {
   rowLimit: number;
   filterColumn: string;
   filterValue: string;
+  filterOperator: string;
   groupByColumn: string;
   aggregation: string;
   seriesColors: string;
@@ -51,12 +57,14 @@ interface ISharePointSmartChartsState {
   drillDownColumns: string;
   bookmarks: string;
   // View-only interaction state (never persisted)
-  viewerFilterColumn: string;
-  viewerFilterValue: string;
+  viewerFilters: IRowFilter[];
+  viewAsTable: boolean;
   drillPath: string[];
   detailCategory: string;
   // Persisted upload state
   uploadedFileName: string;
+  // Network source returned a capped result (SP list row limit / Graph page cap)
+  truncated: boolean;
 }
 
 // Group rows by a column, aggregating every numeric column. 'count' yields a
@@ -65,7 +73,7 @@ const COUNT_COLUMN = 'Count';
 const getCountColumnName = (groupBy: string): string =>
   groupBy === COUNT_COLUMN ? `${COUNT_COLUMN}_1` : COUNT_COLUMN;
 
-const aggregateRows = (rows: IChartRecord[], groupBy: string, agg: string): IChartRecord[] => {
+const aggregateRows = (rows: IChartRecord[], groupBy: string, agg: string, errorType?: string): IChartRecord[] => {
   if (!groupBy || !agg || agg === 'none' || !rows.length) return rows;
   const keys: string[] = [];
   const groups: Record<string, IChartRecord[]> = {};
@@ -94,9 +102,20 @@ const aggregateRows = (rows: IChartRecord[], groupBy: string, agg: string): ICha
         }
         if (!values.length) continue;
         if (agg === 'sum') out[col] = values.reduce((a, b) => a + b, 0);
-        else if (agg === 'avg') out[col] = values.reduce((a, b) => a + b, 0) / values.length;
-        else if (agg === 'min') out[col] = Math.min(...values);
-        else if (agg === 'max') out[col] = Math.max(...values);
+        else if (agg === 'avg') {
+          const mean = values.reduce((a, b) => a + b, 0) / values.length;
+          out[col] = mean;
+          // Error bars on an average must reflect each group's own spread, not
+          // one series-wide deviation - carry the per-group SD/SEM alongside.
+          if (errorType === 'sd' || errorType === 'sem') {
+            const sd = values.length > 1
+              ? Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / (values.length - 1))
+              : 0;
+            out[ERROR_COLUMN_PREFIX + col] = errorType === 'sd' ? sd : sd / Math.sqrt(values.length);
+          }
+        }
+        else if (agg === 'min') out[col] = values.reduce((a, b) => Math.min(a, b), Infinity);
+        else if (agg === 'max') out[col] = values.reduce((a, b) => Math.max(a, b), -Infinity);
       }
     }
     return out;
@@ -213,6 +232,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
       rowLimit: props.rowLimit || 0,
       filterColumn: props.filterColumn || '',
       filterValue: props.filterValue || '',
+      filterOperator: props.filterOperator || 'contains',
       groupByColumn: props.groupByColumn || '',
       aggregation: props.aggregation || 'none',
       seriesColors: props.seriesColors || '',
@@ -221,11 +241,12 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
       tooltipColumns: props.tooltipColumns || '',
       drillDownColumns: props.drillDownColumns || '',
       bookmarks: props.bookmarks || '',
-      viewerFilterColumn: '',
-      viewerFilterValue: '',
+      viewerFilters: [],
+      viewAsTable: false,
       drillPath: [],
       detailCategory: '',
       uploadedFileName: props.uploadedFileName || '',
+      truncated: false,
       dataSourceConfig: {
         dataSourceType: srcType,
         uploadedFileName: props.uploadedFileName || '',
@@ -266,17 +287,30 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     const load = async () => {
       try {
         let rows: IChartRecord[] = [];
+        let truncated = false;
 
-        const cacheKey = buildCacheKey(srcType, cfg.dataUrl, cfg.dataPath);
+        const cacheKey = buildCacheKeyForConfig(cfg);
         const cacheMinutes = props.cacheMinutes || 0;
 
         if (srcType === 'sharePointList') {
           if (!cfg.listName) { setState(prev => ({ ...prev, isLoading: false })); return; }
-          rows = (await loadSharePointList(context, cfg.siteUrl, cfg.listName)).rows;
+          const cachedList = getCachedRows(cacheKey, cacheMinutes);
+          const result = cachedList
+            ? { rows: cachedList, truncated: false }
+            : await loadSharePointList(context, cfg.siteUrl, cfg.listName);
+          rows = result.rows;
+          truncated = result.truncated;
+          if (cacheMinutes > 0 && !truncated) setCachedRows(cacheKey, rows);
 
         } else if (srcType === 'sharePointFile') {
           if (!cfg.dataUrl) { setState(prev => ({ ...prev, isLoading: false })); return; }
-          rows = (await loadSharePointFile(cfg.dataUrl, cfg.delimiter || undefined, cfg.sheetName || undefined)).rows;
+          const cachedFile = getCachedRows(cacheKey, cacheMinutes);
+          if (cachedFile) {
+            rows = cachedFile;
+          } else {
+            rows = (await loadSharePointFile(cfg.dataUrl, cfg.delimiter || undefined, cfg.sheetName || undefined)).rows;
+            if (cacheMinutes > 0) setCachedRows(cacheKey, rows);
+          }
 
         } else if (srcType === 'restApi' || srcType === 'graphApi') {
           if (!cfg.dataUrl) { setState(prev => ({ ...prev, isLoading: false })); return; }
@@ -284,9 +318,11 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
           if (cached) {
             rows = cached;
           } else {
-            rows = srcType === 'restApi'
-              ? (await loadRestApi(cfg.dataUrl, cfg.dataPath || undefined)).rows
-              : (await loadGraphApi(context, cfg.dataUrl, cfg.dataPath || undefined)).rows;
+            const result = srcType === 'restApi'
+              ? await loadRestApi(cfg.dataUrl, cfg.dataPath || undefined)
+              : await loadGraphApi(context, cfg.dataUrl, cfg.dataPath || undefined);
+            rows = result.rows;
+            truncated = result.truncated;
             if (cacheMinutes > 0) setCachedRows(cacheKey, rows);
           }
         }
@@ -297,7 +333,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
           // > 0 — the auto-refresh interval or the "Refresh" button) so a
           // background reload doesn't close the panel out from under an author
           // who has it open. The very first load still auto-collapses it.
-          handleDataLoaded(rows, extractColumns(rows), { preserveConfigOpen: refreshKey > 0 });
+          handleDataLoaded(rows, extractColumns(rows), { preserveConfigOpen: refreshKey > 0, truncated });
         } else {
           setState(prev => ({ ...prev, isLoading: false }));
         }
@@ -369,7 +405,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     return () => clearInterval(id);
   }, [props.refreshIntervalMinutes, state.dataSourceConfig.dataSourceType]);
 
-  const handleDataLoaded = (data: IChartRecord[], columns: string[], opts?: { preserveConfigOpen?: boolean }) => {
+  const handleDataLoaded = (data: IChartRecord[], columns: string[], opts?: { preserveConfigOpen?: boolean; truncated?: boolean }) => {
     const hasCol = (c: string) => !!c && columns.includes(c);
     const numericCols = columns.filter(col => isNumericCol(col, data));
     const needsNumericX = NUMERIC_X_TYPES.indexOf(chartType) >= 0;
@@ -389,14 +425,21 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
       sizeColumn: hasCol(prevConfig.sizeColumn) ? prevConfig.sizeColumn : '',
     };
     columnConfigRef.current = newColumnConfig;
-    onPropertiesUpdate({
-      xColumn: newColumnConfig.xColumn,
-      yColumns: newColumnConfig.yColumns.join(','),
-    });
+    // Auto-refresh ticks and read-mode loads re-validate the mapping every time;
+    // writing it back then would dirty the page for no reason.
+    const mappingChanged = newColumnConfig.xColumn !== prevConfig.xColumn ||
+      newColumnConfig.yColumns.join(',') !== (prevConfig.yColumns || []).join(',');
+    if (mappingChanged && !isReadOnly) {
+      onPropertiesUpdate({
+        xColumn: newColumnConfig.xColumn,
+        yColumns: newColumnConfig.yColumns.join(','),
+      });
+    }
     setState(prev => ({
       ...prev,
       data,
       columns,
+      truncated: !!opts?.truncated,
       columnConfig: newColumnConfig,
       autoLoadError: '',
       isLoading: false,
@@ -491,6 +534,12 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     }
   };
 
+  // ChartRenderer is React.memo'd — hand it a callback whose identity never changes
+  const itemSelectedRef = React.useRef(handleItemSelected);
+  itemSelectedRef.current = handleItemSelected;
+  const stableItemSelected = React.useCallback(
+    (selection: IChartSelection) => itemSelectedRef.current(selection), []);
+
   const handleDrillTo = (depth: number) => {
     setState(prev => ({ ...prev, drillPath: prev.drillPath.slice(0, depth), detailCategory: '' }));
   };
@@ -510,6 +559,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
         rowLimit: state.rowLimit,
         filterColumn: state.filterColumn,
         filterValue: state.filterValue,
+        filterOperator: state.filterOperator,
         groupByColumn: state.groupByColumn,
         aggregation: state.aggregation,
         xColumn: state.columnConfig.xColumn,
@@ -541,6 +591,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     const nextRowLimit = s.rowLimit ?? state.rowLimit;
     const nextFilterColumn = s.filterColumn ?? state.filterColumn;
     const nextFilterValue = s.filterValue ?? state.filterValue;
+    const nextFilterOperator = s.filterOperator ?? state.filterOperator;
     const nextGroupByColumn = s.groupByColumn ?? state.groupByColumn;
     const nextAggregation = s.aggregation ?? state.aggregation;
     setState(prev => ({
@@ -550,6 +601,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
       rowLimit: nextRowLimit,
       filterColumn: nextFilterColumn,
       filterValue: nextFilterValue,
+      filterOperator: nextFilterOperator,
       groupByColumn: nextGroupByColumn,
       aggregation: nextAggregation,
       columnConfig: nextConfig,
@@ -565,6 +617,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
         rowLimit: nextRowLimit,
         filterColumn: nextFilterColumn,
         filterValue: nextFilterValue,
+        filterOperator: nextFilterOperator,
         groupByColumn: nextGroupByColumn,
         aggregation: nextAggregation,
         xColumn: nextConfig.xColumn,
@@ -575,7 +628,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
 
   const handleDataControlsChange = (partial: {
     sortColumn?: string; sortDirection?: string; rowLimit?: number;
-    filterColumn?: string; filterValue?: string;
+    filterColumn?: string; filterValue?: string; filterOperator?: string;
     groupByColumn?: string; aggregation?: string;
   }) => {
     setState(prev => ({ ...prev, ...partial }));
@@ -585,6 +638,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     if (partial.rowLimit !== undefined) mapped.rowLimit = partial.rowLimit;
     if (partial.filterColumn !== undefined) mapped.filterColumn = partial.filterColumn;
     if (partial.filterValue !== undefined) mapped.filterValue = partial.filterValue;
+    if (partial.filterOperator !== undefined) mapped.filterOperator = partial.filterOperator;
     if (partial.groupByColumn !== undefined) mapped.groupByColumn = partial.groupByColumn;
     if (partial.aggregation !== undefined) mapped.aggregation = partial.aggregation;
     if (Object.keys(mapped).length) onPropertiesUpdate(mapped as any);
@@ -595,7 +649,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     const srcType = cfg.dataSourceType || 'upload';
     if (srcType === 'upload') return;
     // Explicit refresh should bypass the session cache
-    clearCachedRows(buildCacheKey(srcType, cfg.dataUrl, cfg.dataPath));
+    clearCachedRows(buildCacheKeyForConfig(cfg));
     setRefreshKey(k => k + 1);
   };
 
@@ -603,35 +657,33 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
   // input itself stays instant (bound to state.viewerFilterValue), but the
   // expensive filter → aggregate → chart rebuild only re-runs 250ms after the
   // user stops typing, instead of on every keystroke.
-  const [debouncedViewerFilterValue, setDebouncedViewerFilterValue] = React.useState(state.viewerFilterValue);
+  const [debouncedViewerFilters, setDebouncedViewerFilters] = React.useState(state.viewerFilters);
+  const viewerFiltersKey = JSON.stringify(state.viewerFilters);
   React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedViewerFilterValue(state.viewerFilterValue), 250);
+    const t = setTimeout(() => setDebouncedViewerFilters(state.viewerFilters), 250);
     return () => clearTimeout(t);
-  }, [state.viewerFilterValue]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerFiltersKey]);
 
   // Raw rows after author filter, viewer filter, and drill-down filters — but
   // before aggregation. Details-on-demand shows these underlying rows.
   const filteredRows = React.useMemo(() => {
-    let result = [...state.data];
-    if (state.filterColumn && state.filterValue) {
-      const lc = state.filterValue.toLowerCase();
-      result = result.filter(r =>
-        String(r[state.filterColumn] ?? '').toLowerCase().includes(lc)
-      );
-    }
-    if (state.viewerFilterColumn && debouncedViewerFilterValue) {
-      const lc = debouncedViewerFilterValue.toLowerCase();
-      result = result.filter(r =>
-        String(r[state.viewerFilterColumn] ?? '').toLowerCase().includes(lc)
-      );
-    }
+    const externalColumn = props.externalFilterColumn || state.columnConfig.xColumn;
+    let result = applyFilters(state.data, [
+      { column: state.filterColumn, operator: state.filterOperator, value: state.filterValue },
+      ...debouncedViewerFilters,
+      // Value published by another web part (Dynamic Data) - exact match on the chosen column
+      { column: props.externalFilterValue ? externalColumn : '', operator: 'equals', value: props.externalFilterValue },
+    ]);
+    if (result === state.data) result = [...state.data];
     state.drillPath.forEach((value, i) => {
       const col = drillLevels[i];
       if (col) result = result.filter(r => String(r[col] ?? '') === value);
     });
     return result;
-  }, [state.data, state.filterColumn, state.filterValue, state.viewerFilterColumn,
-      debouncedViewerFilterValue, state.drillPath, state.drillDownColumns]);
+  }, [state.data, state.filterColumn, state.filterValue, state.filterOperator,
+      debouncedViewerFilters, props.externalFilterValue, props.externalFilterColumn,
+      state.columnConfig.xColumn, state.drillPath, state.drillDownColumns]);
 
   // While drilling, the active hierarchy level becomes the grouping/X column
   const effectiveGroupBy = drillActive ? drillLevels[drillLevelIndex] : state.groupByColumn;
@@ -640,7 +692,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     : state.aggregation;
 
   const processedData = React.useMemo(() => {
-    let result = aggregateRows(filteredRows, effectiveGroupBy, effectiveAggregation);
+    let result = aggregateRows(filteredRows, effectiveGroupBy, effectiveAggregation, props.errorBarType);
     if (state.sortColumn) {
       result = [...result].sort((a, b) => {
         const av = a[state.sortColumn];
@@ -658,7 +710,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
     }
     if (state.rowLimit > 0) result = result.slice(0, state.rowLimit);
     return result;
-  }, [filteredRows, effectiveGroupBy, effectiveAggregation, state.sortColumn,
+  }, [filteredRows, effectiveGroupBy, effectiveAggregation, props.errorBarType, state.sortColumn,
       state.sortDirection, state.rowLimit]);
 
   const { columns, dataSourceConfig, columnConfig, autoLoadError, isLoading, isConfigOpen, seriesColors } = state;
@@ -674,11 +726,14 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
 
   // 'count' aggregation replaces the row shape with [groupBy, Count] — the chart
   // must read the generated Count column, not the pre-aggregation Y columns.
-  const effectiveColumnConfig: IColumnConfig = effectiveAggregation === 'count'
-    ? { ...columnConfig, xColumn: effectiveGroupBy || columnConfig.xColumn, yColumns: [getCountColumnName(effectiveGroupBy)] }
-    : drillActive
-      ? { ...columnConfig, xColumn: drillLevels[drillLevelIndex] }
-      : columnConfig;
+  const drillXColumn = drillActive ? drillLevels[drillLevelIndex] : '';
+  const effectiveColumnConfig: IColumnConfig = React.useMemo(() => (
+    effectiveAggregation === 'count'
+      ? { ...columnConfig, xColumn: effectiveGroupBy || columnConfig.xColumn, yColumns: [getCountColumnName(effectiveGroupBy)] }
+      : drillActive
+        ? { ...columnConfig, xColumn: drillXColumn }
+        : columnConfig
+  ), [columnConfig, effectiveAggregation, effectiveGroupBy, drillActive, drillXColumn]);
 
   const detailXColumn = effectiveColumnConfig.xColumn;
   const detailRows = state.detailCategory
@@ -742,6 +797,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
                   rowLimit={state.rowLimit}
                   filterColumn={state.filterColumn}
                   filterValue={state.filterValue}
+                  filterOperator={state.filterOperator}
                   groupByColumn={state.groupByColumn}
                   aggregation={state.aggregation}
                   showAdvanced={true}
@@ -768,33 +824,12 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
       )}
 
       {isReadOnly && props.showViewerFilters && hasData && columns.length > 0 && (
-        <div className={styles.viewerFilterBar}>
-          <span className={styles.viewerFilterLabel}>{strings.ViewerFilterLabel}</span>
-          <select
-            value={state.viewerFilterColumn}
-            onChange={e => setState(prev => ({ ...prev, viewerFilterColumn: e.target.value, viewerFilterValue: '' }))}
-            aria-label={strings.ViewerFilterColumnAria}
-          >
-            <option value="">{strings.NoneOption}</option>
-            {columns.map(col => <option key={col} value={col}>{col}</option>)}
-          </select>
-          <input
-            type="text"
-            value={state.viewerFilterValue}
-            onChange={e => setState(prev => ({ ...prev, viewerFilterValue: e.target.value }))}
-            placeholder={strings.FilterValuePlaceholder}
-            disabled={!state.viewerFilterColumn}
-            aria-label={strings.ViewerFilterValueAria}
-          />
-          {(state.viewerFilterColumn || state.viewerFilterValue) && (
-            <button
-              className={styles.secondaryButton}
-              onClick={() => setState(prev => ({ ...prev, viewerFilterColumn: '', viewerFilterValue: '' }))}
-            >
-              {strings.ClearButton}
-            </button>
-          )}
-        </div>
+        <ViewerFilters
+          columns={columns}
+          data={state.data}
+          filters={state.viewerFilters}
+          onChange={viewerFilters => setState(prev => ({ ...prev, viewerFilters }))}
+        />
       )}
 
       {isReadOnly && bookmarkList.length > 0 && (
@@ -837,12 +872,24 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
         </div>
       )}
 
+      {hasData && autoLoadError && (
+        <div className={styles.warningMessage} role="status">
+          {fmt(strings.RefreshFailedNote, autoLoadError)}
+        </div>
+      )}
+      {hasData && state.truncated && srcType !== 'upload' && (
+        <div className={styles.warningMessage} role="status">
+          {fmt(strings.TruncatedDataNote, state.data.length.toLocaleString())}
+        </div>
+      )}
+
       <div className={styles.chartWrapper}>
         {isLoading ? (
           <div className={styles.spinnerWrapper}>
             <div className={styles.spinnerRing} />
           </div>
         ) : (
+          <ChartErrorBoundary resetKey={`${chartType}|${effectiveColumnConfig.xColumn}|${effectiveColumnConfig.yColumns.join(',')}|${processedData.length}`}>
           <ChartRenderer
             data={processedData}
             columnConfig={effectiveColumnConfig}
@@ -883,7 +930,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
             colorByColumn={state.colorByColumn}
             tooltipColumns={state.tooltipColumns}
             aggregation={effectiveAggregation}
-            onItemSelected={handleItemSelected}
+            onItemSelected={stableItemSelected}
             logScaleX={props.logScaleX || false}
             logScaleY2={props.logScaleY2 || false}
             stepLine={props.stepLine || false}
@@ -894,7 +941,15 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
             showDataPoints={props.showDataPoints || false}
             significancePairs={props.significancePairs || ''}
             showBubbleSizeLegend={props.showBubbleSizeLegend || false}
+            waterfallShowTotal={props.waterfallShowTotal || false}
+            waterfallPositiveColor={props.waterfallPositiveColor || ''}
+            waterfallNegativeColor={props.waterfallNegativeColor || ''}
+            waterfallTotalColor={props.waterfallTotalColor || ''}
+            y2ValuePrefix={props.y2ValuePrefix || ''}
+            y2ValueSuffix={props.y2ValueSuffix || ''}
+            annotations={props.annotations || ''}
           />
+          </ChartErrorBoundary>
         )}
       </div>
 
@@ -907,6 +962,18 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
             title={strings.RefreshDataTitle}
           >
             {isLoading ? strings.RefreshingLabel : strings.RefreshDataButton}
+          </button>
+        </div>
+      )}
+
+      {hasData && !showDataTable && !state.detailCategory && (
+        <div>
+          <button
+            className={styles.tableToggleButton}
+            aria-pressed={state.viewAsTable}
+            onClick={() => setState(prev => ({ ...prev, viewAsTable: !prev.viewAsTable }))}
+          >
+            {state.viewAsTable ? strings.HideTableButton : strings.ViewAsTableButton}
           </button>
         </div>
       )}
@@ -925,7 +992,7 @@ const SharePointSmartCharts: React.FC<ISharePointSmartChartsProps> = (props) => 
           <DataTable data={detailRows} columns={columns} />
         </div>
       ) : (
-        showDataTable && hasData && <DataTable data={processedData} columns={columns} />
+        (showDataTable || state.viewAsTable) && hasData && <DataTable data={processedData} columns={columns} />
       )}
     </div>
   );

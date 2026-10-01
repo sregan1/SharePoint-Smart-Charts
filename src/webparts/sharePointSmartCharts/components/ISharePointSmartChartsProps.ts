@@ -1,4 +1,5 @@
 import { WebPartContext } from '@microsoft/sp-webpart-base';
+import type { DynamicProperty } from '@microsoft/sp-component-base';
 import {
   ChartType,
   DataSourceType,
@@ -68,6 +69,7 @@ export interface ISharePointSmartChartsWebPartProps {
   rowLimit: number;
   filterColumn: string;
   filterValue: string;
+  filterOperator: string;
   // Aggregation (inline controls)
   groupByColumn: string;
   aggregation: AggregationType;
@@ -117,10 +119,25 @@ export interface ISharePointSmartChartsWebPartProps {
   significancePairs: string;
   // Bubble chart size legend
   showBubbleSizeLegend: boolean;
+  // Waterfall
+  waterfallShowTotal: boolean;
+  waterfallPositiveColor: string;
+  waterfallNegativeColor: string;
+  waterfallTotalColor: string;
+  // Dual axis number formatting
+  y2ValuePrefix: string;
+  y2ValueSuffix: string;
+  // Annotations: "xValue, note" per line
+  annotations: string;
+  // Filter driven by another web part (Dynamic Data consumer)
+  externalFilter?: DynamicProperty<string>;
+  externalFilterColumn: string;
 }
 
 export interface ISharePointSmartChartsProps extends ISharePointSmartChartsWebPartProps {
   context: WebPartContext;
+  /** Resolved value of the Dynamic Data filter source ('' when unset/empty) */
+  externalFilterValue: string;
   isDarkTheme: boolean;
   isReadOnly: boolean;
   onPropertiesUpdate: (props: Partial<ISharePointSmartChartsWebPartProps>) => void;

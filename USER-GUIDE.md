@@ -1,6 +1,6 @@
 # SharePoint Smart Charts — User Guide
 
-*Version 1.3.1*
+*Version 1.4.0*
 
 This guide walks through every feature of the SharePoint Smart Charts web part from a page editor's perspective.
 
@@ -21,7 +21,7 @@ This guide walks through every feature of the SharePoint Smart Charts web part f
 6. [Choosing a Chart Type](#6-choosing-a-chart-type)
 7. [Chart Settings (Property Pane)](#7-chart-settings-property-pane)
 8. [Analytics — Trendlines, Forecast, Reference Lines](#8-analytics--trendlines-forecast-reference-lines)
-9. [Dual Y Axis, Error Bars & Significance Brackets](#9-dual-y-axis-error-bars--significance-brackets)
+9. [Dual Y Axis, Error Bars, Significance Brackets & Annotations](#9-dual-y-axis-error-bars-significance-brackets--annotations)
 10. [Conditional Formatting](#10-conditional-formatting)
 11. [Interactive Features for Page Viewers](#11-interactive-features-for-page-viewers)
 12. [Web Part Header](#12-web-part-header)
@@ -29,7 +29,8 @@ This guide walks through every feature of the SharePoint Smart Charts web part f
 14. [Exporting](#14-exporting)
 15. [Sample Data Quick-Start](#15-sample-data-quick-start)
 16. [Chart Type Reference](#16-chart-type-reference)
-17. [Troubleshooting](#17-troubleshooting)
+17. [Accessibility & Languages](#17-accessibility--languages)
+18. [Troubleshooting](#18-troubleshooting)
 
 ---
 
@@ -96,7 +97,9 @@ Use this to connect to a live SharePoint list. The chart automatically reflects 
 
 > **Permissions:** The web part accesses the list using the current user's credentials. Users who do not have permission to read the list will see an error.
 
-> **Large lists:** At most 5,000 items are loaded (a SharePoint platform limit). A warning appears when the cap is hit. Lookup and person columns cannot be charted and are hidden from the column mapper.
+> **Large lists:** Lists are loaded page by page, so lists larger than SharePoint's 5,000-item request limit load in full — up to 20,000 rows. If a list is bigger than that, a warning appears in the editor and viewers see a note that only the first rows are shown.
+>
+> **Lookup and person columns:** These are converted to their display text (the person's name or the looked-up value; multi-value fields are joined with `;`), so you can use them as categories. Other complex columns (for example, managed metadata) are still hidden from the column mapper.
 
 ---
 
@@ -146,7 +149,7 @@ Use this to load data from any REST API endpoint that returns JSON.
 URL: https://contoso.sharepoint.com/sites/mysite/_api/web/lists/getbytitle('Sales')/items
 ```
 
-> **Caching:** The **Cache API Results** setting (property pane → Advanced page → Data & Refresh) keeps the response in the browser session for N minutes, so a page with several charts doesn't refetch on every visit. The view-mode **↻ Refresh Data** button always bypasses the cache.
+> **Caching:** The **Cache Data** setting (property pane → Advanced page → Data & Refresh) keeps the response in the browser session for N minutes, so a page with several charts doesn't refetch on every visit. It applies to the SharePoint List, SharePoint File, REST API, and Microsoft Graph sources. The view-mode **↻ Refresh Data** button always bypasses the cache.
 
 > **CORS:** If you see a CORS error, the API server must include the appropriate `Access-Control-Allow-Origin` headers. The SharePoint REST API already supports this for same-tenant requests.
 
@@ -226,7 +229,7 @@ The **Data Controls** panel (below Column Mapping) shapes the data before it rea
 |---|---|
 | **Sort by Column / Direction** | Order the rows ascending or descending by any column |
 | **Row Limit** | Chart only the first N rows after sorting (0 = all) — great for "Top 10" charts |
-| **Filter Column / contains** | Keep only rows where a column contains the typed text |
+| **Filter Column / Operator / Value** | Keep only rows that match. Operators: contains, equals, does not equal, greater than, less than, between (type `low..high`), is empty, is not empty. Numbers and dates compare as numbers and dates; text comparisons ignore case |
 | **Group by Column** | Collapse rows into one per category |
 | **Aggregation** | How grouped numeric values combine: Sum, Average, Count, Min, Max |
 
@@ -330,9 +333,9 @@ Settings are organized into three pages — use the **Back / Next** links at the
 
 | Setting | Description |
 |---|---|
-| **Color Palette** | 7 palettes: Office, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool |
+| **Color Palette** | 8 palettes: Office, Colorblind-safe, Vibrant, Pastel, Monochrome, Traffic Light, Warm, Cool |
 | **Show Data Labels** | Display each data point's value on the chart |
-| **Value Prefix / Suffix** | Text around each label (e.g., `$`, `%`) |
+| **Value Prefix / Suffix** | Text around each label, and around the axis numbers and tooltips on Bar, Line, and Area charts (e.g., `$`, `%`) |
 | **Decimal Places** | 0–4 |
 | **Abbreviate Numbers (K/M)** | 1,000 → 1K, 1,000,000 → 1M, 1,000,000,000 → 1B |
 | **Y Axis Minimum / Maximum** | Override the axis range (leave blank for automatic) |
@@ -347,14 +350,17 @@ Settings are organized into three pages — use the **Back / Next** links at the
 
 ![Property pane — Advanced page with Analytics, Interactivity, and Data & Refresh groups](screenshots/settings-advanced.png)
 
-Covered in detail in sections [8](#8-analytics--trendlines-forecast-reference-lines), [9](#9-dual-y-axis-error-bars--significance-brackets), [10](#10-conditional-formatting), and [11](#11-interactive-features-for-page-viewers), plus:
+Covered in detail in sections [8](#8-analytics--trendlines-forecast-reference-lines), [9](#9-dual-y-axis-error-bars-significance-brackets--annotations), [10](#10-conditional-formatting), and [11](#11-interactive-features-for-page-viewers), plus:
 
 | Setting | Description |
 |---|---|
 | **Overlay Data Points on Bars** | Show individual value markers on top of bars — Bar and Horizontal Bar charts only |
 | **Show Bubble Size Legend** | Small/medium/large size key for the Bubble chart |
 | **Auto-Refresh Interval** | Reload network sources every N minutes (0 = off) — for always-on dashboard pages; disabled for the Upload File source |
-| **Cache API Results** | Cache REST/Graph responses for N minutes per browser session (0 = off) — only applies to the REST API and Microsoft Graph sources |
+| **Cache Data** | Cache loaded data for N minutes per browser session (0 = off) — applies to every source except Upload File |
+| **Waterfall** group | Show a Total bar and choose the increase, decrease, and total colors — Waterfall only (see [section 16](#16-chart-type-reference)) |
+| **Annotations** group | Vertical markers with a note at chosen X values — Bar, Line, and Area (see [section 9](#9-dual-y-axis-error-bars-significance-brackets--annotations)) |
+| **Filter from Another Web Part** group | Filter the chart by a value published by another web part (see [section 11](#11-interactive-features-for-page-viewers)) |
 
 All settings are saved with the page automatically.
 
@@ -387,9 +393,9 @@ The line is labeled with its value in the legend, and its color is configurable.
 
 ---
 
-## 9. Dual Y Axis, Error Bars & Significance Brackets
+## 9. Dual Y Axis, Error Bars, Significance Brackets & Annotations
 
-*(Property pane → Advanced page → Dual Y Axis, Error Bars, and Significance Brackets groups — Bar, Horizontal Bar, Line, and Area charts, except Significance Brackets which is Bar only)*
+*(Property pane → Advanced page → Dual Y Axis, Error Bars, Significance Brackets, and Annotations groups — Dual Y Axis works on Bar, Line, and Area; Error Bars on Bar, Horizontal Bar, Line, and Area; Annotations on Bar, Line, and Area; Significance Brackets on Bar only)*
 
 ### Dual Y Axis
 
@@ -398,6 +404,7 @@ When two series have very different scales — say, Revenue in dollars and Conve
 1. In **Right-axis series**, type the exact column name(s) to move to the right axis, comma-separated for more than one (e.g. `Margin,Growth`).
 2. Optionally set a **Right axis label** to caption it.
 3. Toggle **Log Scale (Right Axis)** if the right-axis values themselves span several orders of magnitude.
+4. Set **Y2 Value Prefix / Suffix** to format the right axis, its data labels, and its tooltips differently from the left axis (e.g. `%` on the right, `$` on the left). Left blank, the right axis uses the same prefix and suffix as the rest of the chart.
 
 Any Y column not listed stays on the original (left) axis.
 
@@ -408,8 +415,8 @@ Show a margin of uncertainty above and below each bar or point:
 | Error Bar Type | What it draws |
 |---|---|
 | **Custom column (±)** | Reads the ± amount from another column you pick in **Error value column** — use this when you already have a margin, confidence interval, or standard deviation calculated per row |
-| **Std Dev (computed)** | Computes the standard deviation of each series automatically |
-| **Std Error of Mean (computed)** | Computes the standard error of the mean of each series automatically |
+| **Std Dev (computed)** | Computes the standard deviation of each series automatically. When you group with the **Average** aggregation, each group gets its own standard deviation |
+| **Std Error of Mean (computed)** | Computes the standard error of the mean of each series automatically. With **Average** grouping, each group gets its own value |
 
 ### Significance Brackets
 
@@ -425,6 +432,19 @@ GroupA,GroupC,p<0.05
 ```
 
 `col1` and `col2` must match category values on the X axis exactly. A JSON array of `{ "col1", "col2", "label" }` objects is also accepted for more complex cases.
+
+### Annotations
+
+*(Bar, Line, and Area charts)*
+
+Mark an event on the chart — a launch, an outage, a policy change — with a dashed vertical line and a short note. In **Annotations**, enter one per line as the X-axis value, a comma, then the note text:
+
+```
+Mar, Product launch
+Jul, Pricing change
+```
+
+The X value must match a category on the axis exactly (for a date axis, any date the browser can read, such as `2026-03-15`). Markers that fall outside the chart are skipped, and neighboring notes are staggered so they don't overprint each other.
 
 ---
 
@@ -450,7 +470,7 @@ These features change what *visitors* can do with the published page. All are of
 
 *(Property pane → Advanced page → Interactivity → "Show Filters to Viewers")*
 
-Viewers get a compact filter row above the chart: pick a column, type text, and the chart filters live. Viewer filters are per-visit only — they never change the saved page.
+Viewers get a filter row above the chart: pick a column, pick an operator (contains, equals, does not equal, greater than, less than, between, is empty, is not empty), and enter a value — the chart filters live. For *equals* and *does not equal*, columns with up to 50 distinct values offer a dropdown of those values. Click **+ Add filter** to combine several filters (a row must match all of them). Viewer filters are per-visit only — they never change the saved page.
 
 ![Viewer filter bar above a chart in view mode](screenshots/feature-viewer-filters.png)
 
@@ -478,7 +498,9 @@ For list/file/API sources, viewers see a **↻ Refresh Data** button to re-pull 
 
 ### Connecting Other Web Parts (Dynamic Data)
 
-The web part publishes three dynamic data properties — **Selected category**, **Selected value**, and **Selected series** — updated whenever someone clicks a chart element. Web parts that consume dynamic data (e.g., the Embed web part, or list web parts with dynamic filtering) can connect to these to build click-to-filter dashboards: edit the consuming web part → **Connect to source** → choose the SharePoint Smart Charts web part.
+**Publishing selections.** The web part publishes three dynamic data properties — **Selected category**, **Selected value**, and **Selected series** — updated whenever someone clicks a chart element. Web parts that consume dynamic data (e.g., the Embed web part, or list web parts with dynamic filtering) can connect to these to build click-to-filter dashboards: edit the consuming web part → **Connect to source** → choose the SharePoint Smart Charts web part.
+
+**Filtering from another web part.** The web part can also *consume* dynamic data, so a click in one web part can filter another chart. Open the property pane → **Advanced** page → **Filter from Another Web Part**, choose the source web part and property, and optionally name the **Column to Filter** (it defaults to the X-axis column). While the source publishes a value, only the rows whose column equals that value are charted; when it is empty, the chart shows everything. Two Smart Charts web parts can drive each other this way — for example, a region chart that filters a monthly-trend chart.
 
 ---
 
@@ -506,6 +528,7 @@ Enable **Show Data Table** in the property pane to display a scrollable, paginat
 - Rows are shown 20 at a time with **Prev / Next** navigation.
 - The table is visible in both Edit and View mode.
 - The table reflects your sort, filter, and aggregation settings.
+- If **Show Data Table** is off, viewers still get a **View as table** link under the chart that shows and hides the same table — useful for screen-reader users and anyone who wants the exact numbers.
 
 ---
 
@@ -633,15 +656,19 @@ Turn on **Stacked** in the property pane when you want to show how individual pa
 
 ### Data Labels
 
-Enable **Show Data Labels** to annotate each bar, point, or slice with its value. Use **Value Prefix** (e.g., `$`) and **Abbreviate Numbers** to format values as `$285K` instead of `285000`.
+Enable **Show Data Labels** to annotate each bar, point, or slice with its value. Use **Value Prefix** (e.g., `$`) and **Abbreviate Numbers** to format values as `$285K` instead of `285000` — on Bar, Line, and Area charts the same formatting is applied to the axis numbers and tooltips.
 
 ![Bar chart with $K data labels above each bar](screenshots/feature-data-labels.png)
 
 ### Color Palettes
 
-Seven built-in palettes are available in the property pane. Choose one that fits your SharePoint theme or use case. Individual series colors can be overridden with the color swatch next to each checked Y column.
+Eight built-in palettes are available in the property pane, including a **Colorblind-safe** palette (Okabe-Ito) that stays distinguishable for the common forms of color blindness. Choose one that fits your SharePoint theme or use case. Individual series colors can be overridden with the color swatch next to each checked Y column.
 
-![Seven color palette swatches side by side](screenshots/feature-palettes.png)
+![Eight color palette swatches side by side](screenshots/feature-palettes.png)
+
+### Waterfall total bar and colors
+
+On a Waterfall chart, turn on **Show Total Bar** (Advanced page → Waterfall) to append a final bar that spans from zero to the cumulative total. **Increase Color**, **Decrease Color**, and **Total Color** take hex values (blank = the palette color, red `#d13438`, and gray `#69797e`).
 
 ### Multi-series and combo charts
 
@@ -675,7 +702,37 @@ Cell color intensity scales with the absolute value relative to the largest valu
 
 ---
 
-## 17. Troubleshooting
+## 17. Accessibility & Languages
+
+### Keyboard navigation
+
+Bar, Horizontal Bar, Line, Area, Pie, Doughnut, Radar, Waterfall, and Histogram charts can be explored without a mouse. Tab to the chart, then:
+
+| Key | Action |
+|---|---|
+| **→ / ↓** | Move to the next data point |
+| **← / ↑** | Move to the previous data point |
+| **Home / End** | Jump to the first / last data point |
+| **Enter** or **Space** | Select the point (drill down, show details, or publish to connected web parts) |
+| **Esc** | Clear the highlight |
+
+The highlighted point shows its tooltip, and a screen reader announces its label and values.
+
+### View as table
+
+Every chart has a **View as table** link (see [section 13](#13-viewing-the-data-table)) that shows the same numbers as a table.
+
+### Colorblind-safe palette
+
+Choose **Colorblind-safe** in the Color Palette dropdown (see [section 16](#16-chart-type-reference)).
+
+### Languages
+
+The web part's interface follows each user's Microsoft 365 display language and is translated into 30 languages: English, Arabic, Chinese (Simplified and Traditional), Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian Bokmål, Polish, Portuguese (Brazil and Portugal), Romanian, Russian, Spanish, Swedish, Thai, Turkish, Ukrainian, and Vietnamese. Your own data (column names, values) is never translated.
+
+---
+
+## 18. Troubleshooting
 
 ### "No data loaded yet"
 
@@ -697,9 +754,9 @@ If the file exceeded the 200 KB persistence limit, a yellow warning was shown on
 - Ensure you have at least Read permission on the list.
 - If loading from another site, verify the Site URL is correct and accessible.
 
-### "This list has 5,000 or more items; only the first 5,000 were loaded"
+### A warning says only the first rows of a list were loaded
 
-A SharePoint platform limit. Pre-filter or aggregate the data upstream (e.g., a filtered list, a Power Automate rollup, or a REST endpoint) if you need more than 5,000 rows charted.
+Lists load in pages up to a cap of 20,000 rows. If your list is larger, pre-filter or aggregate the data upstream (e.g., a filtered list view, a Power Automate rollup, or a REST endpoint) so the chart receives fewer rows.
 
 ### Microsoft Graph: "HTTP 401" or "HTTP 403"
 
@@ -716,6 +773,14 @@ The API server must include `Access-Control-Allow-Origin: *` (or your SharePoint
 ### "Scatter and bubble charts need numeric values…"
 
 The X or Y axis is mapped to a column that contains no numbers (e.g., a `Company` name column). The X and Y dropdowns only list numeric columns — pick one of those. If you want to label each point with a text value like a company name, use the **Point Label** field in the Column Mapping panel instead of the axis fields. Rows with occasional non-numeric values in the axis columns are simply skipped.
+
+### "Last refresh failed" appears above the chart
+
+An auto-refresh or **Refresh Data** click could not reach the source (network, permissions, or an expired session). The chart keeps showing the last data that loaded; reload the page or click **↻ Refresh Data** once the source is reachable.
+
+### The chart shows an error message instead of the chart
+
+The chart could not be drawn with the current settings — the message names the problem (for example, an unsupported column mapping). Adjust the mapping or chart type and the chart redraws automatically; the rest of the page is unaffected.
 
 ### Chart appears but shows gaps or missing bars
 

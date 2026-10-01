@@ -25,7 +25,7 @@ import {
   SP_LIST_ROW_LIMIT,
   GRAPH_MAX_PAGES,
   clearCachedRows,
-  buildCacheKey,
+  buildCacheKeyForConfig,
 } from '../services/dataLoaders';
 import styles from './SharePointSmartCharts.module.scss';
 
@@ -183,6 +183,7 @@ const DataSourcePanel: React.FC<IDataSourcePanelProps> = ({
     try {
       const result = await loadSharePointList(context, config.siteUrl, config.listName);
       handleDataLoaded(result.rows);
+      clearCachedRows(buildCacheKeyForConfig(config));
       if (result.truncated) {
         setWarning(fmt(strings.ListTruncatedWarning, SP_LIST_ROW_LIMIT.toLocaleString()));
       }
@@ -202,6 +203,7 @@ const DataSourcePanel: React.FC<IDataSourcePanelProps> = ({
       const result = await loadSharePointFile(config.dataUrl, config.delimiter || undefined, sheet);
       setSheetNames(result.sheetNames && result.sheetNames.length > 1 ? result.sheetNames : []);
       handleDataLoaded(result.rows, undefined, result.parseWarningCount);
+      clearCachedRows(buildCacheKeyForConfig(config));
     } catch (err) {
       setError(fmt(strings.ErrorLoadFile, err instanceof Error ? err.message : String(err)));
     } finally {
@@ -218,7 +220,7 @@ const DataSourcePanel: React.FC<IDataSourcePanelProps> = ({
       handleDataLoaded(result.rows);
       // A manual load reflects the latest server data — clear any older
       // cached entry so a later page reload doesn't resurrect stale rows.
-      clearCachedRows(buildCacheKey('restApi', config.dataUrl, config.dataPath));
+      clearCachedRows(buildCacheKeyForConfig(config));
     } catch (err) {
       setError(fmt(strings.ErrorFetchData, err instanceof Error ? err.message : String(err)));
     } finally {
@@ -233,7 +235,7 @@ const DataSourcePanel: React.FC<IDataSourcePanelProps> = ({
     try {
       const result = await loadGraphApi(context, config.dataUrl, config.dataPath || undefined);
       handleDataLoaded(result.rows);
-      clearCachedRows(buildCacheKey('graphApi', config.dataUrl, config.dataPath));
+      clearCachedRows(buildCacheKeyForConfig(config));
       if (result.truncated) {
         setWarning(fmt(strings.GraphTruncatedWarning, GRAPH_MAX_PAGES));
       }

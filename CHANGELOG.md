@@ -4,6 +4,44 @@ All notable changes to SharePoint Smart Charts are documented here.
 
 ---
 
+## [1.4.0] — 2026-09-29
+
+A feature release: richer filtering (operators, multiple viewer filters, cross-chart filtering from another web part), waterfall totals, annotations, keyboard and screen-reader accessibility, SharePoint lists beyond 5,000 items, and the interface in 30 languages — plus a round of bug fixes from a full code review.
+
+### Added
+
+- **30 languages** — the interface is now translated into the same 30 languages as Smart Org Chart (Arabic, Chinese Simplified/Traditional, Czech, Danish, Dutch, Finnish, French, German, Greek, Hebrew, Hindi, Hungarian, Indonesian, Italian, Japanese, Korean, Norwegian Bokmål, Polish, Portuguese Brazil/Portugal, Romanian, Russian, Spanish, Swedish, Thai, Turkish, Ukrainian, Vietnamese, plus English) and follows each user's Microsoft 365 display language.
+- **Filter operators** — the author filter and viewer filters now support contains, equals, does not equal, greater than, less than, between (`low..high`), is empty, and is not empty. Viewers can add multiple filter rows, and equals/does-not-equal offer a dropdown of the column's values.
+- **Filter from another web part** — new Dynamic Data consumer (Advanced > Filter from Another Web Part): rows are filtered to the value another web part publishes, e.g. a click on another chart.
+- **Waterfall total bar** with configurable increase / decrease / total colors.
+- **Annotations** — vertical markers with a note at a given X value on bar, line, and area charts.
+- **Y2 value prefix / suffix**, and value prefix / suffix / abbreviation now also apply to axis ticks and tooltips on bar, line, and area charts.
+- **Accessibility** — a "View as table" toggle, arrow-key navigation between data points (Enter selects) with screen-reader announcements, and a colorblind-safe palette.
+- **Session caching** for SharePoint List and SharePoint File sources (previously REST/Graph only).
+- SharePoint lists larger than 5,000 items now load in full (paged, up to 20,000 rows). Lookup and person columns are flattened to their display text instead of being dropped.
+- SD / SEM error bars on averaged groups now use each group's own spread.
+
+### Changed
+
+- **"Cache API Results" is now "Cache Data"** and applies to every network source (SharePoint List, SharePoint File, REST API, Microsoft Graph). Existing values are kept.
+- **SharePoint list cap raised from 5,000 to 20,000 rows** (loaded in pages). Anything past the cap is flagged to editors and viewers.
+- **Value prefix / suffix / abbreviation now also format axis numbers and tooltips** on Bar, Line, and Area charts, not just data labels.
+- Documentation screenshots refreshed: viewer filter bar, color palettes (now shows all 8 palettes instead of being cropped), Advanced property pane, and the data source panel (now shows the Microsoft Graph tile).
+
+### Fixed
+
+- Auto-refresh and read-mode loads no longer write the column mapping back to the page (which marked it dirty on every refresh).
+- Error bars are aligned correctly on a time axis when some rows have unparseable dates.
+- The Dual Y Axis group is no longer shown for horizontal bar charts, where it had no effect.
+- A Chart.js runtime error now shows an inline message instead of taking down the whole web part.
+- Theme changes after load now re-render the chart, and strong/dark section backgrounds are detected as dark.
+- Viewers are now told when a source was truncated, and when a background refresh failed while older data is still shown.
+- Heatmaps with values between 0 and 1 no longer render almost invisible, and duplicate cells are summed instead of overlapping.
+- Abbreviated values no longer round up to "1,000K"; treemap labels stay readable on light palettes; very large datasets no longer risk a stack overflow in min/max.
+- Removed the broken `npm test` script (no test runner is configured).
+
+---
+
 ## [1.3.1] — 2026-08-12
 
 No new chart types or data sources. Fixes a settings-persistence bug plus a data-loading bug, and changes X/Y Axis Label to default from the selected column instead of requiring manual entry.
