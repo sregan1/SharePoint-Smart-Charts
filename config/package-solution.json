@@ -7,10 +7,10 @@
     "includeClientSideAssets": true,
     "isDomainIsolated": false,
     "developer": {
-      "name": "SharePoint Smart Solutions",
-      "websiteUrl": "https://sharepointsmartsolutions.com",
-      "privacyUrl": "",
-      "termsOfUseUrl": "",
+      "name": "Vivity, Inc.",
+      "websiteUrl": "https://sharepointsmartsolutions.com/smart-data-visualization",
+      "privacyUrl": "https://sharepointsmartsolutions.com/privacy",
+      "termsOfUseUrl": "https://sharepointsmartsolutions.com/terms",
       "mpnId": ""
     },
     "metadata": {
