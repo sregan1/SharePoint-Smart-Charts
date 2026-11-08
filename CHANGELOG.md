@@ -4,6 +4,19 @@ All notable changes to SharePoint Smart Charts are documented here.
 
 ---
 
+## [1.4.1] — 2026-11-08
+
+A bug-fix release for loading SharePoint lists.
+
+### Fixed
+
+- **SharePoint lists failing to load** with a 400 error such as "The field or property 'ItemChildCount' does not exist" (or `AppAuthor`). System reference columns — folder child counts, compliance fields, and the "by app" author/editor fields — are no longer expanded. Only user-facing lookup and person columns (plus Created By / Modified By) are expanded.
+- If SharePoint still rejects an unexpected column, only that column is skipped and the list loads with the rest of the lookup and person columns intact, instead of failing outright.
+
+Thanks to James Woodruff for reporting and diagnosing this issue.
+
+---
+
 ## [1.4.0] — 2026-09-29
 
 A feature release: richer filtering (operators, multiple viewer filters, cross-chart filtering from another web part), waterfall totals, annotations, keyboard and screen-reader accessibility, SharePoint lists beyond 5,000 items, and the interface in 30 languages — plus a round of bug fixes from a full code review.

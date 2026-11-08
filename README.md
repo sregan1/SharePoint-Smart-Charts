@@ -1,6 +1,6 @@
 # SharePoint Smart Charts
 
-[![Version](https://img.shields.io/badge/version-1.4.0-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/smart-data-visualization) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.4.1-informational)](CHANGELOG.md) [![Website](https://img.shields.io/badge/Website-sharepointsmartsolutions.com-blue)](https://sharepointsmartsolutions.com/smart-data-visualization) [![User Guide](https://img.shields.io/badge/User%20Guide-Read%20Now-green)](USER-GUIDE.md) [![Download](https://img.shields.io/badge/Download-Latest%20Release-CA5010?logo=github&logoColor=white)](../../releases/latest) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A SharePoint Framework (SPFx) web part that renders interactive charts from multiple data sources with no coding required — 17 chart types, drill-down, bookmarks, trendlines, and click-to-filter integration, all configured through the SharePoint page editor.
 

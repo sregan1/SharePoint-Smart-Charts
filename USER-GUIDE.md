@@ -1,6 +1,6 @@
 # SharePoint Smart Charts — User Guide
 
-*Version 1.4.0*
+*Version 1.4.1*
 
 This guide walks through every feature of the SharePoint Smart Charts web part from a page editor's perspective.
 
