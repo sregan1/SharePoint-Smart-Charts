@@ -94,6 +94,27 @@ interface ISpField {
   LookupField?: string;
 }
 
+// System reference fields that are Lookup/User-typed (so loadExpandableFields
+// would pick them up) but whose child rows SharePoint REST refuses to expand —
+// folder child-count ghosts (ItemChildCount/FolderChildCount), the compliance
+// reference cells (_Compliance*), and the "by app" author/editor reference
+// cells (AppAuthor/AppEditor, User-typed like Author/Editor). Expanding any of
+// them yields a 400: "The field or property '<name>' does not exist." Exclude
+// them so the generated $expand/$select never references a field the server
+// can't resolve. This is still just a known-offender list — unknown system
+// fields are handled defensively by the expand-failure retry in
+// loadSharePointList.
+const SP_EXPAND_SKIP = new Set([
+  'ItemChildCount',
+  'FolderChildCount',
+  '_ComplianceFlags',
+  '_ComplianceTag',
+  '_ComplianceTagWrittenTime',
+  '_ComplianceTagUserId',
+  'AppAuthor',
+  'AppEditor',
+]);
+
 // Lookup/person fields come back as nested objects (or arrays of them) that
 // can't be charted. Expand them so the display text (person name / lookup
 // value) is available, keyed by the same internal name as before.
@@ -108,7 +129,9 @@ const loadExpandableFields = async (
     return fields.filter(f =>
       ['Lookup', 'LookupMulti', 'User', 'UserMulti'].indexOf(f.TypeAsString) >= 0 &&
       // Read-only system lookups (e.g. "Content Type") aren't expandable
-      f.InternalName !== 'ContentType');
+      f.InternalName !== 'ContentType' &&
+      // System reference cells (child counts, compliance) reject expansion
+      !SP_EXPAND_SKIP.has(f.InternalName));
   } catch {
     return []; // metadata is a nicety — fall back to the plain item load
   }
@@ -138,25 +161,47 @@ export const loadSharePointList = async (
   const list = sp.web.lists.getByTitle(listName);
   const expandable = await loadExpandableFields(sp, listName);
 
-  let query = list.items.select('*').top(SP_PAGE_SIZE);
-  if (expandable.length) {
-    const selects = expandable.map(f => `${f.InternalName}/${f.TypeAsString.indexOf('User') === 0 ? 'Title' : (f.LookupField || 'Title')}`);
-    query = list.items
-      .select('*', ...selects)
+  const expandQuery = (): any =>
+    list.items
+      .select('*',
+        ...expandable.map(f => `${f.InternalName}/${f.TypeAsString.indexOf('User') === 0 ? 'Title' : (f.LookupField || 'Title')}`))
       .expand(...expandable.map(f => f.InternalName))
       .top(SP_PAGE_SIZE);
-  }
+  const plainQuery = (): any => list.items.select('*').top(SP_PAGE_SIZE);
 
   // Follow paging so lists larger than one REST page load in full, up to the cap
-  const rawRows: IChartRecord[] = [];
-  let page = await query.getPaged();
-  let more = false;
-  for (;;) {
-    for (const item of page.results as IChartRecord[]) rawRows.push(item);
-    if (!page.hasNext) break;
-    if (rawRows.length >= SP_LIST_ROW_LIMIT) { more = true; break; }
-    page = await page.getNext();
+  const fetchPaged = async (query: any): Promise<{ rawRows: IChartRecord[]; truncated: boolean }> => {
+    const rawRows: IChartRecord[] = [];
+    let page = await query.getPaged();
+    let more = false;
+    for (;;) {
+      for (const item of page.results as IChartRecord[]) rawRows.push(item);
+      if (!page.hasNext) break;
+      if (rawRows.length >= SP_LIST_ROW_LIMIT) { more = true; break; }
+      page = await page.getNext();
+    }
+    return { rawRows, truncated: more || rawRows.length > SP_LIST_ROW_LIMIT };
+  };
+
+  // Expand lookup/person fields for display text; if the server rejects an
+  // unforeseen system reference field (400 "does not exist"), degrade to the
+  // plain item load rather than fail the whole list.
+  let loaded: { rawRows: IChartRecord[]; truncated: boolean };
+  if (expandable.length) {
+    try {
+      loaded = await fetchPaged(expandQuery());
+    } catch (err) {
+      if (err instanceof Error && /does not exist/i.test(err.message)) {
+        console.warn('[SmartCharts] List expansion failed, retrying without expand:', err.message);
+        loaded = await fetchPaged(plainQuery());
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    loaded = await fetchPaged(plainQuery());
   }
+  const { rawRows, truncated } = loaded;
 
   const textFieldFor = new Map<string, string>();
   expandable.forEach(f => textFieldFor.set(
@@ -177,7 +222,7 @@ export const loadSharePointList = async (
     }
     return out;
   });
-  return { rows, truncated: more || rawRows.length > SP_LIST_ROW_LIMIT };
+  return { rows, truncated };
 };
 
 const FETCH_TIMEOUT_MS = 30_000;
